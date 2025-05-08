@@ -1,0 +1,11 @@
+/* Placeholder for any custom CSS rules */
+body {
+    font-family: sans-serif; /* Example: ensure a basic font */
+}
+
+/* Example: Add some spacing or custom styles not covered by Tailwind utility classes */
+.container {
+    /* max-width: 1280px; /* Example if you want to constrain width more than Tailwind's default container */
+}
+
+/* You can add more specific styles here if needed */

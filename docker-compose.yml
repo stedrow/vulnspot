@@ -1,0 +1,13 @@
+services:
+  vulnspot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data:/app/data
+    environment:
+      - DATABASE_URL=sqlite:////app/data/vuln_scanner.db # Set for Docker to use path inside container
+    restart: unless-stopped
