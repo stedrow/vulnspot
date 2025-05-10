@@ -21,15 +21,20 @@ def trigger_image_scan(image_id: str, db: Session = Depends(get_db)):
     if not db_image:
         raise HTTPException(status_code=404, detail=f"Image with ID '{image_id}' not found in database.")
     
-    image_name_for_analysis_and_grype = f"{db_image.name}:{db_image.tag}" if db_image.tag else db_image.name
+    image_name_for_analysis = f"{db_image.name}:{db_image.tag}" if db_image.tag else db_image.name
 
-    # 1. Perform Image Analysis (Rootless, Shellless, Distroless)
+    analysis_temp_dir_manager = None # Initialize to ensure it's defined for finally block
     try:
-        print(f"Attempting to analyze image characteristics: {image_name_for_analysis_and_grype} (DB ID: {image_id})")
+        # 1. Perform Image Analysis (Rootless, Shellless, Distroless)
+        print(f"Attempting to analyze image characteristics: {image_name_for_analysis} (DB ID: {image_id})")
         analyzer = ContainerAnalyzer()
-        analysis_results = analyzer.analyze_image(image_name_for_analysis_and_grype)
+        # analyze_image now returns a dict including _temp_dir_manager_obj and image_tar_path
+        analysis_results = analyzer.analyze_image(image_name_for_analysis)
         
-        # Save boolean results
+        analysis_temp_dir_manager = analysis_results.get("_temp_dir_manager_obj")
+        image_tar_path_for_grype = analysis_results.get("image_tar_path")
+
+        # Save boolean results and other analysis details
         db_image.is_rootless = analysis_results.get("is_rootless")
         db_image.is_shellless = analysis_results.get("is_shellless")
         db_image.is_distroless = analysis_results.get("is_distroless")
@@ -43,37 +48,62 @@ def trigger_image_scan(image_id: str, db: Session = Depends(get_db)):
         
         db.commit()
         print(f"Image analysis results for {image_id} saved to DB.")
-    except Exception as e_analyze:
-        db.rollback() # Rollback analysis changes if error occurs
-        print(f"Error during image analysis for {image_id} ({image_name_for_analysis_and_grype}): {e_analyze}")
-        db_image.image_analysis_error = f"Analyzer failed: {str(e_analyze)}" 
-        db_image.last_analyzed_at = datetime.utcnow() 
-        db_image.found_shell_path = None 
-        db_image.found_package_manager_path = None
-        db_image.distribution_info = None # Ensure distro info is None on error
-        try:
-            db.commit()
-        except Exception as e_commit_err:
-            db.rollback()
-            print(f"Failed to commit analysis error to DB: {e_commit_err}")
 
-    # 2. Perform Vulnerability Scan (Grype)
-    try:
-        print(f"Attempting to scan image with Grype: {image_name_for_analysis_and_grype} (DB ID: {image_id})")
-        scan_result_data = service_scan_image(image_name_with_tag=image_name_for_analysis_and_grype, image_id=db_image.id, db=db)
-        # service_scan_image is expected to commit its own transaction for scan, vulnerabilities, counts.
+        # Check if image analysis itself failed critically before proceeding to Grype
+        if analysis_results.get("error"):
+            # If there was an error in analysis that prevented getting tar path, we can't scan with Grype
+            print(f"Image analysis for {image_id} encountered an error: {analysis_results.get('error')}. Skipping Grype scan.")
+            # We still want to return something or signal that scan part didn't happen.
+            # The current structure expects ScanResult or HTTPException from this endpoint.
+            # Raising an HTTPException here because the primary goal (scan) can't be fully achieved if tar path is missing.
+            if not image_tar_path_for_grype:
+                raise HTTPException(status_code=500, detail=f"Image analysis failed to produce a scan target: {analysis_results.get('error')}")
+            # If tar path exists but there was some other non-critical analysis error, we might still try to scan.
+            # For now, let's assume if analysis_results["error"] is set, we should report it prominently.
+
+        if not image_tar_path_for_grype:
+            # This case should ideally be caught by analysis_results.get("error") check above,
+            # but as a safeguard:
+            print(f"No image tar path found for {image_id} after analysis. Cannot proceed with Grype scan.")
+            raise HTTPException(status_code=500, detail="Image analysis did not yield a tarball for scanning.")
+
+        # 2. Perform Vulnerability Scan (Grype)
+        # Pass image_tar_path_for_grype to service_scan_image
+        # The image_name_for_analysis is still useful for context/logging within service_scan_image if needed,
+        # but Grype will use the tarball.
+        print(f"Attempting to scan image with Grype using tarball: {image_tar_path_for_grype} (Original name: {image_name_for_analysis}, DB ID: {image_id})")
+        scan_result_data = service_scan_image(
+            image_tar_path=image_tar_path_for_grype, 
+            image_id=db_image.id, 
+            db=db,
+            image_name_with_tag=image_name_for_analysis # Pass for logging/context if needed
+        )
         return scan_result_data
+
     except FileNotFoundError as e_grype_fnf: 
         print(f"Grype command not found during scan trigger: {e_grype_fnf}")
+        db.rollback() # Rollback any potential partial DB changes from analysis if Grype setup fails
         raise HTTPException(status_code=500, detail="Scanner tool (Grype) not found on server.")
-    except Exception as e_grype:
-        print(f"Error during Grype scan for image {image_id} ({image_name_for_analysis_and_grype}): {e_grype}")
-        # The Grype scan failed, but image analysis might have succeeded.
-        # The page will reload, and view_logic will pick up whatever data is available.
-        # We need to return something that matches ScanResult or raise an appropriate HTTP error for the Grype part.
-        # If Grype fails, we don't have a ScanResult to return. 
-        # It's better to raise HTTPException as the primary purpose of this endpoint was the scan.
-        raise HTTPException(status_code=500, detail=f"Failed to scan image {image_name_for_analysis_and_grype} with Grype. Error: {str(e_grype)}")
+    except HTTPException: # Re-raise HTTPExceptions directly
+        raise
+    except Exception as e_main:
+        db.rollback() # Rollback any DB changes if an unexpected error occurs
+        print(f"Error during scan trigger for image {image_id} ({image_name_for_analysis}): {e_main}")
+        # Update image_analysis_error in DB if it was an error during analysis part before scan was called
+        if 'analyzer' in locals() and not isinstance(e_main, FileNotFoundError): # Avoid overwriting specific Grype FNF error
+            try:
+                if db_image: # Ensure db_image is available
+                    db_image.image_analysis_error = f"Outer scope error: {str(e_main)}"
+                    db.commit()
+            except Exception as e_commit_err:
+                db.rollback()
+                print(f"Failed to commit outer scope analysis error to DB: {e_commit_err}")
+        raise HTTPException(status_code=500, detail=f"Failed to process or scan image {image_name_for_analysis}. Error: {str(e_main)}")
+    finally:
+        # Ensure the temporary directory from image analysis is cleaned up
+        if analysis_temp_dir_manager:
+            print(f"Cleaning up temporary directory for image analysis of {image_name_for_analysis}.")
+            analysis_temp_dir_manager.cleanup()
 
 @router.get("/scans") # Add response_model for List[ScanOverviewSchema] or similar
 def list_all_scans(db: Session = Depends(get_db)):

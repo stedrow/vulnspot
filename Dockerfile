@@ -1,8 +1,8 @@
-FROM python:3.12-slim
+FROM python:3.13-alpine3.21
 
 # Install Grype
-RUN apt-get update && \
-    apt-get install -y curl && \
+RUN apk update && \
+    apk add --no-cache curl && \
     curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
 
 # Set working directory
@@ -24,4 +24,4 @@ EXPOSE 8000
 
 # Command to run the application
 # Ensure the main module is correctly referenced if it's within a subdirectory of /app
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app"] 
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"] 
