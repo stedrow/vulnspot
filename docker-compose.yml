@@ -1,13 +1,30 @@
 services:
+  docker-socket-proxy:
+    image: 11notes/socket-proxy:2.1.2
+    container_name: docker-socket-proxy
+    read_only: true
+    user: "0:0"  # make sure to use the same UID/GID as the owner of your docker socket!
+    restart: always
+    volumes:
+      - /run/docker.sock:/run/docker.sock:ro
+      - socket-proxy:/run/proxy
+
   vulnspot:
+    container_name: vulnspot
     build:
       context: .
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+      - socket-proxy:/var/run
       - ./data:/app/data
     environment:
       - DATABASE_URL=sqlite:////app/data/vuln_scanner.db # Set for Docker to use path inside container
     restart: unless-stopped
+    depends_on:
+      docker-socket-proxy:
+        condition: service_healthy
+
+volumes:
+  socket-proxy:

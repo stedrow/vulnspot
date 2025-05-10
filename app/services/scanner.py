@@ -11,22 +11,44 @@ from sqlalchemy.orm import Session # For type hinting
 # If it's meant to be used with `Depends(get_db_session)`, 
 # then scanner functions might need to be API endpoints or refactored.
 
-def scan_image(image_name_with_tag: str, image_id: str, db: Session):
-    cmd = ["grype", image_name_with_tag, "-o", "json"]
+def scan_image(image_id: str, db: Session, image_tar_path: str, image_name_with_tag: str = None):
+    """
+    Scans an image using Grype from a tarball and processes the results.
+    The image_name_with_tag is optional and used for logging/context if provided.
+    """
+    scan_target = f"docker-archive:{image_tar_path}"
+    log_name = image_name_with_tag if image_name_with_tag else image_tar_path
+
+    print(f"Executing Grype scan for target: {scan_target} (Image ID: {image_id}, Original name: {log_name})")
+    cmd = ["grype", scan_target, "-o", "json"]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True) # Added check=True
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
     except FileNotFoundError:
-        # Grype not found, log and raise or return error status
-        print("Error: Grype command not found. Ensure Grype is installed and in PATH.")
-        # Consider how to report this: raise specific exception or return an error ScanResult
-        # For now, re-raising to make it explicit that scan failed fundamentally.
-        raise Exception("Grype command not found")
+        print(f"Error: Grype command not found. Ensure Grype is installed and in PATH. Attempted to scan: {log_name}")
+        raise Exception(f"Grype command not found. Could not scan {log_name}") # Re-raise for handling upstream
     except subprocess.CalledProcessError as e:
-        # Grype executed but returned a non-zero exit code (scan error, or other grype issue)
-        print(f"Grype scan failed with exit code {e.returncode}: {e.stderr}")
-        # Update scan status to failed in DB if a scan record was started
-        # For now, directly raising an exception
-        raise Exception(f"Grype scan failed: {e.stderr}")
+        print(f"Grype scan failed for {log_name} with exit code {e.returncode}: {e.stderr}")
+        # Attempt to save a failed scan status if possible
+        try:
+            existing_scan = db.query(Scan).filter(Scan.image_id == image_id).order_by(Scan.scan_time.desc()).first()
+            if existing_scan and existing_scan.scan_status != "failed":
+                existing_scan.scan_status = "failed"
+                existing_scan.scan_details = f"Grype failed: {e.stderr[:1024]}" # Store some error detail
+                db.commit()
+            elif not existing_scan:
+                # Create a new scan record indicating failure if one doesn't exist from a previous step
+                failed_scan = Scan(
+                    image_id=image_id,
+                    scan_time=datetime.utcnow(),
+                    scan_status="failed",
+                    scan_details=f"Grype failed: {e.stderr[:1024]}"
+                )
+                db.add(failed_scan)
+                db.commit()
+        except Exception as db_error:
+            print(f"Additionally, failed to update/create scan status in DB for {log_name} after Grype failure: {db_error}")
+            db.rollback()
+        raise Exception(f"Grype scan failed for {log_name}: {e.stderr}")
 
     scan_data = json.loads(result.stdout)
     

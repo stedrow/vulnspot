@@ -11,9 +11,9 @@
                 <tr>
                     <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Name</th>
                     <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Image Name</th>
-                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Image ID</th>
+                    <th class="hidden md:table-cell px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Image ID</th>
                     <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Status</th>
-                    <th class="px-2 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Created</th>
+                    <th class="hidden md:table-cell px-2 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Created</th>
                     <th class="px-2 py-2 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Scanned</th>
                     <th class="px-2 py-2 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">R/S/D</th>
                     <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Vulnerabilities</th>
@@ -26,9 +26,9 @@
                     <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
                         <td class="px-3 py-2 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200 align-middle">{{ container.name }}</td>
                         <td class="px-3 py-2 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200 align-middle">{{ container.image_name }}</td>
-                        <td class="px-3 py-2 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200 align-middle">{{ container.image_id }}</td>
+                        <td class="hidden md:table-cell px-3 py-2 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200 align-middle">{{ container.image_id }}</td>
                         <td class="px-3 py-2 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200 align-middle">{{ container.status }}</td>
-                        <td class="px-2 py-2 text-sm text-gray-500 dark:text-gray-400 align-middle">{{ container.created_at.strftime('%Y-%m-%d %H:%M') if container.created_at else 'N/A' }}</td>
+                        <td class="hidden md:table-cell px-2 py-2 text-sm text-gray-500 dark:text-gray-400 align-middle">{{ container.created_at.strftime('%Y-%m-%d %H:%M') if container.created_at else 'N/A' }}</td>
                         <td class="px-2 py-2 text-sm text-gray-500 dark:text-gray-400 align-middle text-center">
                             {% if container.last_scanned %}
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-green-500 dark:text-green-400 inline-block" viewBox="0 0 20 20" fill="currentColor">

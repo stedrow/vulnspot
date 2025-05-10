@@ -31,125 +31,113 @@ class ContainerAnalyzer:
     def analyze_image(self, image_name):
         """
         Efficiently analyze a Docker image without running it
+        Returns a dictionary with analysis results, image_tar_path, and the TemporaryDirectory manager object.
         """
-        # Pull the image if not already present
+        temp_dir_manager = tempfile.TemporaryDirectory()
+        temp_dir = temp_dir_manager.name
+        image_tar_path_for_return = None # Initialize
+
         try:
-            image = self.client.images.get(image_name)
-        except docker.errors.ImageNotFound:
-            print(f"Pulling image {image_name}...")
+            # Pull the image if not already present
             try:
-                image = self.client.images.pull(image_name)
-            except docker.errors.APIError as e:
-                print(f"Error pulling image {image_name}: {e}")
+                image = self.client.images.get(image_name)
+            except docker.errors.ImageNotFound:
+                print(f"Pulling image {image_name}...")
+                try:
+                    image = self.client.images.pull(image_name)
+                except docker.errors.APIError as e:
+                    print(f"Error pulling image {image_name}: {e}")
+                    temp_dir_manager.cleanup()
+                    return {
+                        "image_name": image_name, "is_rootless": None, "is_shellless": None,
+                        "is_distroless": None, "error": str(e), "details": {},
+                        "image_tar_path": None, "_temp_dir_manager_obj": None
+                    }
+
+            if not image:
+                print(f"Image {image_name} could not be obtained.")
+                temp_dir_manager.cleanup()
                 return {
-                    "image_name": image_name,
-                    "is_rootless": None,
-                    "is_shellless": None,
-                    "is_distroless": None,
-                    "error": str(e),
-                    "details": {}
+                    "image_name": image_name, "is_rootless": None, "is_shellless": None,
+                    "is_distroless": None, "error": "Image could not be obtained after attempting pull.",
+                    "details": {}, "image_tar_path": None, "_temp_dir_manager_obj": None
                 }
 
-        if not image: # If pull failed and returned None or some other falsy value
-            print(f"Image {image_name} could not be obtained.")
-            return {
-                    "image_name": image_name,
-                    "is_rootless": None,
-                    "is_shellless": None,
-                    "is_distroless": None,
-                    "error": "Image could not be obtained after attempting pull.",
-                    "details": {}
+            # Get image details
+            try:
+                image_details = self.client.api.inspect_image(image.id)
+            except docker.errors.APIError as e:
+                print(f"Error inspecting image {image.id} ({image_name}): {e}")
+                temp_dir_manager.cleanup()
+                return {
+                    "image_name": image_name, "is_rootless": None, "is_shellless": None,
+                    "is_distroless": None, "error": f"Failed to inspect image: {str(e)}",
+                    "details": {"image_id": image.id if image else "Unknown"},
+                    "image_tar_path": None, "_temp_dir_manager_obj": None
                 }
 
-        # Get image details (part of the Docker API, very fast)
-        try:
-            image_details = self.client.api.inspect_image(image.id)
-        except docker.errors.APIError as e:
-            print(f"Error inspecting image {image.id} ({image_name}): {e}")
+            # Filesystem analysis
+            rootfs_path, image_tar_path_for_return = self._extract_image_efficiently(image.id, temp_dir)
+            
+            with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+                has_shell_future = executor.submit(self._has_shell, rootfs_path)
+                has_package_mgr_future = executor.submit(self._has_package_manager, rootfs_path)
+                file_count_future = executor.submit(self._count_files_efficiently, rootfs_path)
+                distro_info_future = executor.submit(self._get_distribution_info, rootfs_path)
+                
+                found_shell_path = has_shell_future.result()
+                found_package_manager_path = has_package_mgr_future.result()
+                file_count = file_count_future.result()
+                distribution_info = distro_info_future.result()
+            
+            is_distroless_result = self._is_distroless(
+                image_name, image_details, rootfs_path,
+                bool(found_shell_path), bool(found_package_manager_path), file_count
+            )
+            
+            is_rootless_val = self._is_rootless(image_details)
+            
             return {
                 "image_name": image_name,
-                "is_rootless": None,
-                "is_shellless": None,
-                "is_distroless": None,
-                "error": f"Failed to inspect image: {str(e)}",
-                "details": {"image_id": image.id if image else "Unknown"}
+                "is_rootless": is_rootless_val,
+                "is_shellless": not bool(found_shell_path),
+                "is_distroless": is_distroless_result,
+                "details": {
+                    "has_shell": bool(found_shell_path), "found_shell_path": found_shell_path,
+                    "has_package_manager": bool(found_package_manager_path),
+                    "found_package_manager_path": found_package_manager_path,
+                    "user": image_details.get("Config", {}).get("User", ""),
+                    "file_count": file_count, "image_id": image.id,
+                    "distribution_info": distribution_info
+                },
+                "error": None,
+                "image_tar_path": image_tar_path_for_return,
+                "_temp_dir_manager_obj": temp_dir_manager
             }
 
-        # Create a temporary directory for extraction
-        with tempfile.TemporaryDirectory() as temp_dir:
-            try:
-                # Save and extract image only once
-                rootfs_path = self._extract_image_efficiently(image.id, temp_dir)
-                
-                # Use parallelization for independent filesystem checks
-                with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
-                    # Submit tasks
-                    has_shell_future = executor.submit(self._has_shell, rootfs_path)
-                    has_package_mgr_future = executor.submit(self._has_package_manager, rootfs_path)
-                    file_count_future = executor.submit(self._count_files_efficiently, rootfs_path)
-                    distro_info_future = executor.submit(self._get_distribution_info, rootfs_path)
-                    
-                    # Get results
-                    found_shell_path = has_shell_future.result()
-                    found_package_manager_path = has_package_mgr_future.result()
-                    file_count = file_count_future.result()
-                    distribution_info = distro_info_future.result()
-                
-                # Check for distroless characteristics
-                is_distroless_result = self._is_distroless(
-                    image_name, 
-                    image_details,
-                    rootfs_path,
-                    bool(found_shell_path),
-                    bool(found_package_manager_path),
-                    file_count
-                )
-            except Exception as e:
-                print(f"Error during filesystem analysis for {image_name}: {e}")
-                # If extraction or analysis fails, we can't determine shell/distroless status
-                # Rootless check can still proceed as it only needs image_details
-                is_rootless_val = self._is_rootless(image_details)
-                distribution_info = None # Ensure distro info is None on error
-                return {
-                    "image_name": image_name,
-                    "is_rootless": is_rootless_val,
-                    "is_shellless": None, # Cannot determine
-                    "is_distroless": None, # Cannot determine
-                    "error": f"Filesystem analysis failed: {str(e)}",
-                    "details": {
-                        "user": image_details.get("Config", {}).get("User", ""),
-                        "image_id": image.id,
-                        "distribution_info": distribution_info
-                    }
-                }
-
-        # Check rootless from image metadata (doesn't need filesystem analysis)
-        is_rootless_val = self._is_rootless(image_details)
-        
-        # Build the results
-        results = {
-            "image_name": image_name,
-            "is_rootless": is_rootless_val,
-            "is_shellless": not bool(found_shell_path),
-            "is_distroless": is_distroless_result,
-            "details": {
-                "has_shell": bool(found_shell_path),
-                "found_shell_path": found_shell_path,
-                "has_package_manager": bool(found_package_manager_path),
-                "found_package_manager_path": found_package_manager_path,
-                "user": image_details.get("Config", {}).get("User", ""),
-                "file_count": file_count,
-                "image_id": image.id,
-                "distribution_info": distribution_info
-            },
-            "error": None
-        }
-        
-        return results
+        except Exception as e:
+            print(f"Error during image analysis for {image_name}: {e}")
+            # temp_dir_manager will be returned for cleanup by the caller even in case of error
+            is_rootless_val = self._is_rootless(image_details) if 'image_details' in locals() else None
+            distribution_info = None
+            return {
+                "image_name": image_name,
+                "is_rootless": is_rootless_val,
+                "is_shellless": None, "is_distroless": None,
+                "error": f"Filesystem analysis failed: {str(e)}",
+                "details": {
+                    "user": image_details.get("Config", {}).get("User", "") if 'image_details' in locals() else "",
+                    "image_id": image.id if 'image' in locals() and image else "Unknown",
+                    "distribution_info": distribution_info
+                },
+                "image_tar_path": image_tar_path_for_return, # May be None or have a path
+                "_temp_dir_manager_obj": temp_dir_manager # Crucial for cleanup by caller
+            }
     
     def _extract_image_efficiently(self, image_id, temp_dir):
         """
-        Extract just what we need from the image
+        Extracts image layers to rootfs and saves image.tar in temp_dir.
+        Returns rootfs_path and image_tar_path.
         """
         image_tar_path = os.path.join(temp_dir, "image.tar")
         try:
@@ -163,63 +151,78 @@ class ContainerAnalyzer:
         rootfs_path = os.path.join(temp_dir, "rootfs")
         os.makedirs(rootfs_path, exist_ok=True)
         
-        with tarfile.open(image_tar_path, 'r') as tar:
-            for member in tar.getmembers():
-                if member.name == 'manifest.json' or member.name.endswith('.json'): # Config file is usually .json, not just manifest
-                    try:
-                        tar.extract(member, path=temp_dir)
-                    except Exception as e:
-                        print(f"Warning: Could not extract manifest/config {member.name} from {image_id}: {e}")
-
-        manifest_path = os.path.join(temp_dir, "manifest.json")
-        manifest = None
+        manifest_path = None # Initialize
         try:
-            with open(manifest_path, 'r') as f:
-                manifest = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError) as e:
-            print(f"Manifest file not found or invalid for {image_id}, attempting fallback extraction: {e}")
-            self._extract_image_fallback(image_tar_path, rootfs_path)
-            if os.path.exists(image_tar_path): os.unlink(image_tar_path)
-            return rootfs_path
-        
-        if manifest and isinstance(manifest, list) and len(manifest) > 0:
+            with tarfile.open(image_tar_path, 'r') as tar: # First pass to find manifest.json
+                for member in tar.getmembers():
+                    if member.name == 'manifest.json':
+                        tar.extract(member, path=temp_dir)
+                        manifest_path = os.path.join(temp_dir, "manifest.json")
+                        break
+                    # Some images might have a differently named JSON config file at the root
+                    # that acts as a manifest, often image_id.json or similar.
+                    # This is less standard than manifest.json for 'docker save' tars.
+                    elif member.name.endswith('.json') and '/' not in member.name: 
+                         tar.extract(member, path=temp_dir)
+                         # Heuristic: assume the first root-level JSON is the one we want if no manifest.json
+                         if manifest_path is None: # Prioritize manifest.json if found later
+                            manifest_path = os.path.join(temp_dir, member.name)
+
+
+        except Exception as e:
+            print(f"Warning: Could not extract manifest/config from initial tar scan of {image_id}: {e}")
+            # Continue to fallback if manifest extraction failed
+
+        manifest = None
+        if manifest_path and os.path.exists(manifest_path):
+            try:
+                with open(manifest_path, 'r') as f:
+                    manifest = json.load(f)
+            except (FileNotFoundError, json.JSONDecodeError) as e:
+                print(f"Manifest file {manifest_path} not found or invalid for {image_id}, attempting fallback extraction: {e}")
+                # Fallback will use image_tar_path
+        else: # No manifest_path determined or file doesn't exist
+             print(f"Manifest file not found after initial scan for {image_id}, attempting fallback extraction.")
+
+
+        if manifest and isinstance(manifest, list) and len(manifest) > 0 and "Layers" in manifest[0]:
             layers_paths_in_manifest = manifest[0].get("Layers", [])
             
-            for layer_filename_in_manifest in layers_paths_in_manifest: 
-                # layer_filename_in_manifest is the path of the layer tarball *within* the main image.tar
-                # e.g., 'abcdef12345/layer.tar'
+            if not os.path.exists(image_tar_path):
+                 print(f"CRITICAL: image.tar expected at {image_tar_path} but not found before layer extraction. Aborting layer processing.")
+                 # Fallback is unlikely to succeed if image.tar isn't there.
+                 # We will proceed to the fallback call below, but it will likely also fail.
+            else:
+                for layer_filename_in_manifest in layers_paths_in_manifest: 
+                    actual_extracted_layer_tar_path = os.path.join(temp_dir, layer_filename_in_manifest)
+                    try:
+                        with tarfile.open(image_tar_path, 'r') as image_tar_file_obj:
+                            member_found = False
+                            for member in image_tar_file_obj.getmembers():
+                                if member.name == layer_filename_in_manifest:
+                                    image_tar_file_obj.extract(member, path=temp_dir)
+                                    member_found = True
+                                    break
+                            if not member_found:
+                                print(f"Warning: Layer {layer_filename_in_manifest} not found in image tar for {image_id}.")
+                                continue
+                    except Exception as e:
+                        print(f"Error extracting layer {layer_filename_in_manifest} from image tar: {e}")
+                        continue
 
-                # This is the full path to where the layer tarball will be once extracted from image.tar
-                actual_extracted_layer_tar_path = os.path.join(temp_dir, layer_filename_in_manifest)
-
-                try:
-                    with tarfile.open(image_tar_path, 'r') as image_tar_file_obj: # Open the main image.tar again
-                        member_found = False
-                        for member in image_tar_file_obj.getmembers():
-                            if member.name == layer_filename_in_manifest:
-                                image_tar_file_obj.extract(member, path=temp_dir) # Extracts to temp_dir/layer_filename_in_manifest
-                                member_found = True
-                                break
-                        if not member_found:
-                            print(f"Warning: Layer {layer_filename_in_manifest} not found in image tar for {image_id}.")
-                            continue
-                except Exception as e:
-                    print(f"Error extracting layer {layer_filename_in_manifest} from image tar: {e}")
-                    continue
-
-                if not os.path.exists(actual_extracted_layer_tar_path):
-                    print(f"Warning: Extracted layer tarball {actual_extracted_layer_tar_path} was expected but does not exist.")
-                    continue
-                
-                self._selective_layer_extract(actual_extracted_layer_tar_path, rootfs_path)
-                if os.path.exists(actual_extracted_layer_tar_path): 
-                     os.unlink(actual_extracted_layer_tar_path)
-        else:
-            print(f"Manifest for {image_id} does not contain layers or is not in expected format. Attempting fallback.")
+                    if not os.path.exists(actual_extracted_layer_tar_path):
+                        print(f"Warning: Extracted layer tarball {actual_extracted_layer_tar_path} was expected but does not exist.")
+                        continue
+                    
+                    self._selective_layer_extract(actual_extracted_layer_tar_path, rootfs_path)
+                    if os.path.exists(actual_extracted_layer_tar_path): 
+                        os.unlink(actual_extracted_layer_tar_path) # Clean up individual layer tar after processing
+        else: # manifest is None, or not list, or no Layers
+            print(f"Manifest for {image_id} does not contain layers or is not in expected format. Attempting fallback extraction from {image_tar_path}.")
             self._extract_image_fallback(image_tar_path, rootfs_path)
 
-        if os.path.exists(image_tar_path): os.unlink(image_tar_path)
-        return rootfs_path
+        # DO NOT UNLINK image_tar_path here. Caller manages the temp_dir.
+        return rootfs_path, image_tar_path
     
     def _extract_image_fallback(self, image_tar_path, rootfs_path):
         """
@@ -227,6 +230,10 @@ class ContainerAnalyzer:
         which might be layers within the main image.tar.
         """
         print(f"Executing fallback extraction for {image_tar_path}")
+        if not os.path.exists(image_tar_path):
+            print(f"Fallback extraction cannot proceed: main image tarball {image_tar_path} does not exist.")
+            return rootfs_path # Or raise specific error
+
         with tarfile.open(image_tar_path, 'r') as tar:
             for member in tar.getmembers():
                 # Check if the member is a tar file itself (a layer)
