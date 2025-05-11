@@ -5,6 +5,7 @@ import tempfile
 import tarfile
 from pathlib import Path
 import concurrent.futures
+from logger import logger
 
 class ContainerAnalyzer:
     def __init__(self):
@@ -256,6 +257,7 @@ class ContainerAnalyzer:
         Also extracts symlink targets if the symlink itself is matched.
         """
         # print(f"[_selective_layer_extract] Source: {layer_tar_source if not is_fileobj else 'fileobj'}, Target: {rootfs_path}")
+        logger.debug(f"[_selective_layer_extract] Source: {layer_tar_source if not is_fileobj else 'fileobj'}, Target: {rootfs_path}")
         try:
             tar_opener = tarfile.open(name=None if is_fileobj else layer_tar_source, fileobj=layer_tar_source if is_fileobj else None, mode='r')
             
@@ -265,10 +267,12 @@ class ContainerAnalyzer:
                 members_in_layer_dict = {m.name.lstrip('./'): m for m in members_in_layer}
                 member_names_in_layer = list(members_in_layer_dict.keys())
                 # print(f"[_selective_layer_extract] Members found in layer: {member_names_in_layer[:20]}... (total {len(member_names_in_layer)})")
+                logger.debug(f"[_selective_layer_extract] Members found in layer: {member_names_in_layer[:20]}... (total {len(member_names_in_layer)})")
 
                 initial_matches = []
                 paths_to_check = self.shell_paths + self.package_manager_paths + self.os_indicator_files
                 # print(f"[_selective_layer_extract] Paths to check in this layer: {paths_to_check}")
+                logger.debug(f"[_selective_layer_extract] Paths to check in this layer: {paths_to_check}")
 
                 for member in members_in_layer:
                     member_name_normalized = member.name.lstrip('./')
@@ -276,6 +280,7 @@ class ContainerAnalyzer:
                         for path_to_check in paths_to_check:
                             if member_name_normalized == path_to_check:
                                 # print(f"[_selective_layer_extract] Found initial match: {member.name} (Type: {'File' if member.isfile() else 'Symlink' if member.issym() else 'Other'}) for path: {path_to_check}")
+                                logger.debug(f"[_selective_layer_extract] Found initial match: {member.name} (Type: {'File' if member.isfile() else 'Symlink' if member.issym() else 'Other'}) for path: {path_to_check}")
                                 initial_matches.append(member)
                                 break 
                 
@@ -289,6 +294,7 @@ class ContainerAnalyzer:
                         targets_to_find.add(target_name)
                 
                 # print(f"[_selective_layer_extract] Symlink targets to look for in this layer: {targets_to_find}")
+                logger.debug(f"[_selective_layer_extract] Symlink targets to look for in this layer: {targets_to_find}")
                 for target_name in targets_to_find:
                     target_member = members_in_layer_dict.get(target_name)
                     if target_member:
@@ -296,6 +302,7 @@ class ContainerAnalyzer:
                         is_already_included = any(m.name == target_member.name for m in final_members_to_extract)
                         if not is_already_included:
                             # print(f"[_selective_layer_extract] Adding symlink target member: {target_member.name}")
+                            logger.debug(f"[_selective_layer_extract] Adding symlink target member: {target_member.name}")
                             final_members_to_extract.append(target_member)
                     else:
                          print(f"Warning: Symlink target '{target_name}' was not found in the same layer.")
@@ -307,18 +314,21 @@ class ContainerAnalyzer:
                 # Extract non-symlinks first (including potential targets)
                 if non_symlink_members:
                     # print(f"[_selective_layer_extract] Attempting to extract non-symlinks: {[m.name for m in non_symlink_members]}")
+                    logger.debug(f"[_selective_layer_extract] Attempting to extract non-symlinks: {[m.name for m in non_symlink_members]}")
                     for member_to_extract in non_symlink_members:
                         try:
                             tar.extract(member_to_extract, path=rootfs_path)
                             extracted_file_path = os.path.join(rootfs_path, member_to_extract.name.lstrip('./'))
                             # Log basic extraction result here
                             # print(f"[_selective_layer_extract] Extracted non-symlink {member_to_extract.name} to {extracted_file_path}. Exists: {os.path.exists(extracted_file_path)}, Executable: {os.access(extracted_file_path, os.X_OK)}")
+                            logger.debug(f"[_selective_layer_extract] Extracted non-symlink {member_to_extract.name} to {extracted_file_path}. Exists: {os.path.exists(extracted_file_path)}, Executable: {os.access(extracted_file_path, os.X_OK)}")
                         except Exception as e:
                             print(f"Warning: Could not extract non-symlink {member_to_extract.name} during selective layer extract: {e}")
                 
                 # Extract symlinks second, hoping targets now exist
                 if symlink_members:
                     # print(f"[_selective_layer_extract] Attempting to extract symlinks: {[m.name for m in symlink_members]}")
+                    logger.debug(f"[_selective_layer_extract] Attempting to extract symlinks: {[m.name for m in symlink_members]}")
                     for member_to_extract in symlink_members:
                         try:
                             tar.extract(member_to_extract, path=rootfs_path) # tarfile handles creating the symlink file
@@ -326,6 +336,7 @@ class ContainerAnalyzer:
                             symlink_exists = os.path.lexists(extracted_file_path)
                             # Log only symlink creation success here
                             # print(f"[_selective_layer_extract] Created symlink {member_to_extract.name} at {extracted_file_path}. Link Exists: {symlink_exists}")
+                            logger.debug(f"[_selective_layer_extract] Created symlink {member_to_extract.name} at {extracted_file_path}. Link Exists: {symlink_exists}")
                         except Exception as e:
                             print(f"Warning: Could not extract symlink {member_to_extract.name} during selective layer extract: {e}")
                 # Removed the 'Re-checking' block as checks are now robust in _has_shell
@@ -357,26 +368,34 @@ class ContainerAnalyzer:
         Returns the path of the first found executable shell, or None.
         """
         # print(f"[_has_shell] Checking for shells in: {rootfs_path}")
+        logger.debug(f"[_has_shell] Checking for shells in: {rootfs_path}")
         # print(f"[_has_shell] Shell paths to check: {self.shell_paths}")
+        logger.debug(f"[_has_shell] Shell paths to check: {self.shell_paths}")
         for shell_path in self.shell_paths:
             full_path = os.path.join(rootfs_path, shell_path)
             # print(f"[_has_shell] Checking path: {full_path}")
+            logger.debug(f"[_has_shell] Checking path: {full_path}")
             
             if not os.path.lexists(full_path):
                 # print(f"[_has_shell]   - Path does not exist (lexists=False)")
+                logger.debug(f"[_has_shell]   - Path does not exist (lexists=False)")
                 continue
 
             if not os.path.islink(full_path):
                 if os.path.isfile(full_path) and os.access(full_path, os.X_OK):
                     # print(f"[_has_shell]   - Found executable file: {shell_path}") # Log relative path found
+                    logger.debug(f"[_has_shell]   - Found executable file: {shell_path}") # Log relative path found
                     return shell_path # Return the matched path
                 # else:
                     # print(f"[_has_shell]   - Is file, but not executable (isfile={os.path.isfile(full_path)}, access={os.access(full_path, os.X_OK)})")
+                logger.debug(f"[_has_shell]   - Is file, but not executable (isfile={os.path.isfile(full_path)}, access={os.access(full_path, os.X_OK)})")
             else:
                 # print(f"[_has_shell]   - Is symlink.")
+                logger.debug(f"[_has_shell]   - Is symlink.")
                 try:
                     link_target_name = os.readlink(full_path)
                     # print(f"[_has_shell]     - Link target name: {link_target_name}")
+                    logger.debug(f"[_has_shell]     - Link target name: {link_target_name}")
                     target_path = None
                     if os.path.isabs(link_target_name):
                         target_path = os.path.join(rootfs_path, link_target_name.lstrip('/'))
@@ -385,15 +404,19 @@ class ContainerAnalyzer:
                         target_path = os.path.normpath(os.path.join(symlink_dir, link_target_name))
                     
                     # print(f"[_has_shell]     - Calculated target path: {target_path}")
+                    logger.debug(f"[_has_shell]     - Calculated target path: {target_path}")
                     if os.path.exists(target_path) and not os.path.isdir(target_path) and os.access(target_path, os.X_OK):
                          # print(f"[_has_shell]   - Found symlink pointing to executable target: {shell_path} -> {target_path}")
+                         logger.debug(f"[_has_shell]   - Found symlink pointing to executable target: {shell_path} -> {target_path}")
                          return shell_path # Return the matched path (the symlink itself)
                     # else:
                          # print(f"[_has_shell]     - Target status: Exists={os.path.exists(target_path)}, IsDir={os.path.isdir(target_path)}, Executable={os.access(target_path, os.X_OK)}")
+                    logger.debug(f"[_has_shell]     - Target status: Exists={os.path.exists(target_path)}, IsDir={os.path.isdir(target_path)}, Executable={os.access(target_path, os.X_OK)}")
                 except OSError as e:
                     print(f"[_has_shell]     - Error reading link or checking target: {e}")
         
         # print("[_has_shell] No executable shell found after checking all paths.")
+        logger.debug("[_has_shell] No executable shell found after checking all paths.")
         return None # Return None if no shell found
     
     def _has_package_manager(self, rootfs_path):
@@ -402,26 +425,34 @@ class ContainerAnalyzer:
         Returns the path of the first found executable package manager, or None.
         """
         # print(f"[_has_package_manager] Checking for package managers in: {rootfs_path}")
+        logger.debug(f"[_has_package_manager] Checking for package managers in: {rootfs_path}")
         # print(f"[_has_package_manager] Paths to check: {self.package_manager_paths}")
+        logger.debug(f"[_has_package_manager] Paths to check: {self.package_manager_paths}")
         for pkg_mgr_path in self.package_manager_paths:
             full_path = os.path.join(rootfs_path, pkg_mgr_path)
             # print(f"[_has_package_manager] Checking path: {full_path}")
+            logger.debug(f"[_has_package_manager] Checking path: {full_path}")
             
             if not os.path.lexists(full_path):
                 # print(f"[_has_package_manager]   - Path does not exist (lexists=False)")
+                logger.debug(f"[_has_package_manager]   - Path does not exist (lexists=False)")
                 continue
 
             if not os.path.islink(full_path):
                 if os.path.isfile(full_path) and os.access(full_path, os.X_OK):
                     # print(f"[_has_package_manager]   - Found executable file: {pkg_mgr_path}")
+                    logger.debug(f"[_has_package_manager]   - Found executable file: {pkg_mgr_path}")
                     return pkg_mgr_path # Return the matched path
                 # else:
                     # print(f"[_has_package_manager]   - Is file, but not executable (isfile={os.path.isfile(full_path)}, access={os.access(full_path, os.X_OK)})")
+                logger.debug(f"[_has_package_manager]   - Is file, but not executable (isfile={os.path.isfile(full_path)}, access={os.access(full_path, os.X_OK)})")
             else:
                 # print(f"[_has_package_manager]   - Is symlink.")
+                logger.debug(f"[_has_package_manager]   - Is symlink.")
                 try:
                     link_target_name = os.readlink(full_path)
                     # print(f"[_has_package_manager]     - Link target name: {link_target_name}")
+                    logger.debug(f"[_has_package_manager]     - Link target name: {link_target_name}")
                     target_path = None
                     if os.path.isabs(link_target_name):
                         target_path = os.path.join(rootfs_path, link_target_name.lstrip('/'))
@@ -430,15 +461,19 @@ class ContainerAnalyzer:
                         target_path = os.path.normpath(os.path.join(symlink_dir, link_target_name))
                     
                     # print(f"[_has_package_manager]     - Calculated target path: {target_path}")
+                    logger.debug(f"[_has_package_manager]     - Calculated target path: {target_path}")
                     if os.path.exists(target_path) and not os.path.isdir(target_path) and os.access(target_path, os.X_OK):
                         # print(f"[_has_package_manager]   - Found symlink pointing to executable target: {pkg_mgr_path} -> {target_path}")
+                        logger.debug(f"[_has_package_manager]   - Found symlink pointing to executable target: {pkg_mgr_path} -> {target_path}")
                         return pkg_mgr_path # Return the matched path (the symlink itself)
                     # else:
                         # print(f"[_has_package_manager]     - Target status: Exists={os.path.exists(target_path)}, IsDir={os.path.isdir(target_path)}, Executable={os.access(target_path, os.X_OK)}")
+                    logger.debug(f"[_has_package_manager]     - Target status: Exists={os.path.exists(target_path)}, IsDir={os.path.isdir(target_path)}, Executable={os.access(target_path, os.X_OK)}")
                 except OSError as e:
                     print(f"[_has_package_manager]     - Error reading link or checking target: {e}")
                     
         # print("[_has_package_manager] No executable package manager found.")
+        logger.debug("[_has_package_manager] No executable package manager found.")
         return None # Return None if none found
     
     def _count_files_efficiently(self, rootfs_path):
@@ -468,6 +503,7 @@ class ContainerAnalyzer:
         """
         os_release_path = os.path.join(rootfs_path, "etc/os-release")
         # print(f"[_get_distribution_info] Checking path: {os_release_path}")
+        logger.debug(f"[_get_distribution_info] Checking path: {os_release_path}")
         distro_info = {}
         try:
             with open(os_release_path, 'r') as f:
@@ -483,6 +519,7 @@ class ContainerAnalyzer:
             pretty_name = distro_info.get('PRETTY_NAME')
             if pretty_name:
                  # print(f"[_get_distribution_info] Found PRETTY_NAME: {pretty_name}")
+                 logger.debug(f"[_get_distribution_info] Found PRETTY_NAME: {pretty_name}")
                  return pretty_name
             
             name = distro_info.get('NAME')
@@ -490,17 +527,21 @@ class ContainerAnalyzer:
             if name and version:
                 distro_string = f"{name} {version}"
                 # print(f"[_get_distribution_info] Found NAME+VERSION_ID: {distro_string}")
+                logger.debug(f"[_get_distribution_info] Found NAME+VERSION_ID: {distro_string}")
                 return distro_string
             if name:
                  # print(f"[_get_distribution_info] Found NAME: {name}")
+                 logger.debug(f"[_get_distribution_info] Found NAME: {name}")
                  return name
 
             distro_id = distro_info.get('ID')
             if distro_id:
                 # print(f"[_get_distribution_info] Found ID: {distro_id}")
+                logger.debug(f"[_get_distribution_info] Found ID: {distro_id}")
                 return distro_id
             
             # print("[_get_distribution_info] Parsed /etc/os-release but found no suitable identifier.")
+            logger.debug("[_get_distribution_info] Parsed /etc/os-release but found no suitable identifier.")
             return None # Found file but no useful ID
 
         except FileNotFoundError:
@@ -509,6 +550,7 @@ class ContainerAnalyzer:
             alpine_release_path = os.path.join(rootfs_path, "etc/alpine-release")
             if os.path.exists(alpine_release_path):
                  # print("[_get_distribution_info] Found /etc/alpine-release.")
+                 logger.debug("[_get_distribution_info] Found /etc/alpine-release.")
                  return "Alpine Linux" # Simple identification for Alpine
             return None # File not found
         except Exception as e:
