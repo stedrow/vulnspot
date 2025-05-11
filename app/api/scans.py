@@ -26,7 +26,7 @@ def trigger_image_scan(image_id: str, db: Session = Depends(get_db)):
     analysis_temp_dir_manager = None # Initialize to ensure it's defined for finally block
     try:
         # 1. Perform Image Analysis (Rootless, Shellless, Distroless)
-        print(f"Attempting to analyze image characteristics: {image_name_for_analysis} (DB ID: {image_id})")
+        # print(f"Attempting to analyze image characteristics: {image_name_for_analysis} (DB ID: {image_id})")
         analyzer = ContainerAnalyzer()
         # analyze_image now returns a dict including _temp_dir_manager_obj and image_tar_path
         analysis_results = analyzer.analyze_image(image_name_for_analysis)
@@ -47,7 +47,7 @@ def trigger_image_scan(image_id: str, db: Session = Depends(get_db)):
         db_image.distribution_info = analysis_results.get("details", {}).get("distribution_info")
         
         db.commit()
-        print(f"Image analysis results for {image_id} saved to DB.")
+        # print(f"Image analysis results for {image_id} saved to DB.")
 
         # Check if image analysis itself failed critically before proceeding to Grype
         if analysis_results.get("error"):
@@ -71,7 +71,7 @@ def trigger_image_scan(image_id: str, db: Session = Depends(get_db)):
         # Pass image_tar_path_for_grype to service_scan_image
         # The image_name_for_analysis is still useful for context/logging within service_scan_image if needed,
         # but Grype will use the tarball.
-        print(f"Attempting to scan image with Grype using tarball: {image_tar_path_for_grype} (Original name: {image_name_for_analysis}, DB ID: {image_id})")
+        # print(f"Attempting to scan image with Grype using tarball: {image_tar_path_for_grype} (Original name: {image_name_for_analysis}, DB ID: {image_id})")
         scan_result_data = service_scan_image(
             image_tar_path=image_tar_path_for_grype, 
             image_id=db_image.id, 
@@ -102,7 +102,7 @@ def trigger_image_scan(image_id: str, db: Session = Depends(get_db)):
     finally:
         # Ensure the temporary directory from image analysis is cleaned up
         if analysis_temp_dir_manager:
-            print(f"Cleaning up temporary directory for image analysis of {image_name_for_analysis}.")
+            # print(f"Cleaning up temporary directory for image analysis of {image_name_for_analysis}.")
             analysis_temp_dir_manager.cleanup()
 
 @router.get("/scans") # Add response_model for List[ScanOverviewSchema] or similar

@@ -6,6 +6,8 @@
     <title>{% block title %}VulnSpot Docker Vulnerability Scanner{% endblock %}</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <!-- Link to static CSS if you have one -->
     <link rel="stylesheet" href="{{ url_for('static', path='/css/style.css') }}">
 </head>
@@ -30,44 +32,31 @@
     </footer>
     
     <script>
-        function scanImage(imageId, buttonElement) {
-            const buttonTextElement = buttonElement.querySelector('.button-text');
-            const spinnerElement = buttonElement.querySelector('.spinner');
-            
-            // Store original text if not already stored (e.g., if an error occurred before)
-            if (!buttonElement.dataset.originalText) {
-                buttonElement.dataset.originalText = buttonTextElement.innerHTML;
-            }
-            const originalButtonText = buttonElement.dataset.originalText;
-
-            buttonTextElement.style.display = 'none';
-            spinnerElement.style.display = 'inline-block';
-            buttonElement.disabled = true;
-
-            fetch(`/api/scan/${imageId}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-            })
-            .then(response => {
-                if (!response.ok) {
-                    return response.json().then(err => { 
-                        throw new Error(err.detail || 'Scan initiation failed'); 
-                    });
-                }
-                return response.json();
-            })
-            .then(data => {
-                location.reload(); 
-            })
-            .catch(error => {
-                console.error('Error scanning image:', error);
-                alert('Error scanning image: ' + error.message);
-                buttonTextElement.innerHTML = originalButtonText;
-                buttonTextElement.style.display = 'inline';
-                spinnerElement.style.display = 'none';
-                buttonElement.disabled = false;
+        function scanImage(imageId) {
+            return new Promise((resolve, reject) => {
+                fetch(`/api/scan/${imageId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(err => { 
+                            throw new Error(err.detail || 'Scan initiation failed'); 
+                        });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    location.reload(); 
+                    resolve(data);
+                })
+                .catch(error => {
+                    console.error('Error scanning image:', error);
+                    alert('Error scanning image: ' + error.message);
+                    reject(error);
+                });
             });
         }
     </script>

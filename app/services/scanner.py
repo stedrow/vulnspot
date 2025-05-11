@@ -19,7 +19,7 @@ def scan_image(image_id: str, db: Session, image_tar_path: str, image_name_with_
     scan_target = f"docker-archive:{image_tar_path}"
     log_name = image_name_with_tag if image_name_with_tag else image_tar_path
 
-    print(f"Executing Grype scan for target: {scan_target} (Image ID: {image_id}, Original name: {log_name})")
+    # print(f"Executing Grype scan for target: {scan_target} (Image ID: {image_id}, Original name: {log_name})")
     cmd = ["grype", scan_target, "-o", "json"]
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)

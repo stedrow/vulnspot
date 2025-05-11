@@ -23,7 +23,9 @@
             <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                 {% if containers %}
                     {% for container in containers %}
-                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                    <tr x-data="{ isScanned: {{ 'true' if container.latest_scan_id else 'false' }}, detailsUrl: '{{ url_for('view_scan_details', scan_id=container.latest_scan_id) if container.latest_scan_id else '' }}' }"
+                        @click="if (isScanned && detailsUrl) window.location.href = detailsUrl"
+                        :class="{ 'hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer': isScanned, 'hover:bg-gray-50 dark:hover:bg-gray-700': !isScanned }">
                         <td class="px-3 py-2 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200 align-middle">{{ container.name }}</td>
                         <td class="px-3 py-2 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200 align-middle">{{ container.image_name }}</td>
                         <td class="hidden md:table-cell px-3 py-2 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200 align-middle">{{ container.image_id }}</td>
@@ -101,21 +103,27 @@
                             {% endif %}
                         </td>
                         <td class="px-3 py-2 whitespace-nowrap text-sm font-medium align-middle">
-                            <div class="flex items-center space-x-2">
-                                {% if container.latest_scan_id %}
+                            <div class="flex items-center justify-end">
+                                {# {% if container.latest_scan_id %}
                                     <a href="{{ url_for('view_scan_details', scan_id=container.latest_scan_id) }}" 
                                        class="details-button bg-gray-500 hover:bg-gray-700 dark:bg-gray-600 dark:hover:bg-gray-500 text-white font-bold py-1 px-2 rounded text-xs w-16 h-7 inline-flex items-center justify-center"
                                        title="View Scan Details">
                                         Details
                                     </a>
-                                {% endif %}
-                                <button 
-                                    id="scan-btn-{{ container.image_id }}"
-                                    onclick="scanImage('{{ container.image_id }}', this)"
-                                    class="scan-button bg-blue-500 hover:bg-blue-700 dark:hover:bg-blue-600 text-white font-bold py-1 px-2 rounded text-xs w-16 h-7 flex items-center justify-center"
-                                    {% if not container.image_id %}disabled title="Image ID not available" class="bg-blue-300 dark:bg-blue-800 cursor-not-allowed"{% endif %}>
-                                    <span class="button-text">Scan</span>
-                                    <svg class="spinner h-4 w-4 animate-spin text-white" style="display:none;" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                {% endif %} #}
+                                <button
+                                    x-data="{ isLoading: false, hasImageId: {{ 'true' if container.image_id else 'false' }} }"
+                                    @click.stop="if(hasImageId) { isLoading = true; scanImage('{{ container.image_id }}').catch(() => { isLoading = false; }) }"
+                                    :disabled="isLoading || !hasImageId"
+                                    :class="{
+                                        'scan-button text-white font-bold py-1 px-2 rounded text-xs w-16 h-7 flex items-center justify-center': true,
+                                        'bg-blue-500 hover:bg-blue-700 dark:hover:bg-blue-600': hasImageId && !isLoading,
+                                        'bg-gray-400 dark:bg-gray-600 cursor-wait': isLoading,
+                                        'bg-blue-300 dark:bg-blue-800 cursor-not-allowed': !hasImageId
+                                    }"
+                                    :title="!hasImageId ? 'Image ID not available' : (isLoading ? 'Scanning...' : 'Scan Image')">
+                                    <span x-show="!isLoading" class="button-text">Scan</span>
+                                    <svg x-show="isLoading" class="spinner h-4 w-4 animate-spin text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                                         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                     </svg>
