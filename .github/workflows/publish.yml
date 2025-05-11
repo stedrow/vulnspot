@@ -118,7 +118,7 @@ jobs:
       - name: Update docker-compose.yml with new version
         run: |
           echo "Updating docker-compose.yml with version ${{ steps.calc_version.outputs.new_version }}"
-          sed -i -E "s|(image: ghcr.io/stedrow/vulnspot:)[^[:space:]]+|\\1${{ steps.calc_version.outputs.new_version }}|g" docker-compose.yml
+          sed -i -E "s|(image: ghcr.io/stedrow/grypeui:)[^[:space:]]+|\\1${{ steps.calc_version.outputs.new_version }}|g" docker-compose.yml
           echo "Contents of docker-compose.yml after update:"
           cat docker-compose.yml
 
@@ -233,7 +233,7 @@ jobs:
       - name: Update docker-compose.yml with new version
         run: |
           echo "Updating docker-compose.yml with version ${{ steps.calc_version.outputs.new_version }}"
-          sed -i -E "s|(image: ghcr.io/stedrow/vulnspot:)[^[:space:]]+|\\1${{ steps.calc_version.outputs.new_version }}|g" docker-compose.yml
+          sed -i -E "s|(image: ghcr.io/stedrow/grypeui:)[^[:space:]]+|\\1${{ steps.calc_version.outputs.new_version }}|g" docker-compose.yml
           echo "Contents of docker-compose.yml after update:"
           cat docker-compose.yml
 

@@ -12,8 +12,8 @@ services:
       - /run/docker.sock:/run/docker.sock:ro
       - socket-proxy:/run/proxy
 
-  vulnspot:
-    container_name: vulnspot
+  grypeui:
+    container_name: grypeui
     build:
       context: .
       dockerfile: Dockerfile

@@ -16,7 +16,7 @@ from api import scans as scans_router
 # Import new service for view logic
 from services.view_logic import get_container_display_data, get_full_scan_details
 
-app = FastAPI(title="VulnSpot Docker Container Vulnerability Scanner")
+app = FastAPI(title="GrypeUI Docker Container Vulnerability Scanner")
 
 # Determine paths relative to this main.py file
 MAIN_PY_DIR = Path(__file__).resolve().parent
