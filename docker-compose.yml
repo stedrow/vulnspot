@@ -13,7 +13,7 @@ services:
       - socket-proxy:/run/proxy
 
   vulnspot:
-    image: ghcr.io/stedrow/vulnspot:latest
+    image: ghcr.io/stedrow/vulnspot:0.0.1
     container_name: vulnspot
     ports:
       - "8000:8000"
