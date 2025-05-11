@@ -5,6 +5,7 @@ from datetime import datetime
 from models.database import Scan, Vulnerability, VulnerabilityCounts 
 from models.schemas import ScanResult, VulnerabilityModel
 from sqlalchemy.orm import Session # For type hinting
+from logger import logger
 
 # The spec defines get_db_session() but it's not standard FastAPI `Depends` pattern.
 # For now, assuming it provides a SQLAlchemy session directly.
@@ -20,6 +21,7 @@ def scan_image(image_id: str, db: Session, image_tar_path: str, image_name_with_
     log_name = image_name_with_tag if image_name_with_tag else image_tar_path
 
     # print(f"Executing Grype scan for target: {scan_target} (Image ID: {image_id}, Original name: {log_name})")
+    logger.debug(f"Executing Grype scan for target: {scan_target} (Image ID: {image_id}, Original name: {log_name})")
     cmd = ["grype", scan_target, "-o", "json"]
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)

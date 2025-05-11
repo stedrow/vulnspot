@@ -8,6 +8,7 @@ from models.schemas import ScanResult, VulnerabilityModel, VulnerabilityCountsSc
 from models.database import Image as DBImage, Scan as DBScan, Vulnerability as DBVulnerability, VulnerabilityCounts as DBVulnerabilityCounts # Added DB models
 from services.scanner import scan_image as service_scan_image # Renamed to avoid conflict
 from services.image_analyzer import ContainerAnalyzer # Added ContainerAnalyzer import
+from logger import logger
 # from app.models.database import Image as DBImage, Scan as DBScan # SQLAlchemy models
 # from app.services.scanner import scan_image as service_scan_image
 # Schemas for listing scans, vulnerabilities, counts will be needed
@@ -27,6 +28,7 @@ def trigger_image_scan(image_id: str, db: Session = Depends(get_db)):
     try:
         # 1. Perform Image Analysis (Rootless, Shellless, Distroless)
         # print(f"Attempting to analyze image characteristics: {image_name_for_analysis} (DB ID: {image_id})")
+        logger.debug(f"Attempting to analyze image characteristics: {image_name_for_analysis} (DB ID: {image_id})")
         analyzer = ContainerAnalyzer()
         # analyze_image now returns a dict including _temp_dir_manager_obj and image_tar_path
         analysis_results = analyzer.analyze_image(image_name_for_analysis)
@@ -48,6 +50,7 @@ def trigger_image_scan(image_id: str, db: Session = Depends(get_db)):
         
         db.commit()
         # print(f"Image analysis results for {image_id} saved to DB.")
+        logger.debug(f"Image analysis results for {image_id} saved to DB.")
 
         # Check if image analysis itself failed critically before proceeding to Grype
         if analysis_results.get("error"):
@@ -72,6 +75,7 @@ def trigger_image_scan(image_id: str, db: Session = Depends(get_db)):
         # The image_name_for_analysis is still useful for context/logging within service_scan_image if needed,
         # but Grype will use the tarball.
         # print(f"Attempting to scan image with Grype using tarball: {image_tar_path_for_grype} (Original name: {image_name_for_analysis}, DB ID: {image_id})")
+        logger.debug(f"Attempting to scan image with Grype using tarball: {image_tar_path_for_grype} (Original name: {image_name_for_analysis}, DB ID: {image_id})")
         scan_result_data = service_scan_image(
             image_tar_path=image_tar_path_for_grype, 
             image_id=db_image.id, 
@@ -103,6 +107,7 @@ def trigger_image_scan(image_id: str, db: Session = Depends(get_db)):
         # Ensure the temporary directory from image analysis is cleaned up
         if analysis_temp_dir_manager:
             # print(f"Cleaning up temporary directory for image analysis of {image_name_for_analysis}.")
+            logger.debug(f"Cleaning up temporary directory for image analysis of {image_name_for_analysis}.")
             analysis_temp_dir_manager.cleanup()
 
 @router.get("/scans") # Add response_model for List[ScanOverviewSchema] or similar
