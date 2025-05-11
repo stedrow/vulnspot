@@ -23,15 +23,23 @@
             <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                 {% if containers %}
                     {% for container in containers %}
-                    <tr x-data="{ isScanned: {{ 'true' if container.latest_scan_id else 'false' }}, detailsUrl: '{{ url_for('view_scan_details', scan_id=container.latest_scan_id) if container.latest_scan_id else '' }}' }"
-                        @click="if (isScanned && detailsUrl) window.location.href = detailsUrl"
-                        :class="{ 'hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer': isScanned, 'hover:bg-gray-50 dark:hover:bg-gray-700': !isScanned }">
+                    <tr x-data="{
+                            rowLoopIndex: {{ loop.index0 }},
+                            isScanned: {{ 'true' if container.latest_scan_id else 'false' }},
+                            scanState: '{{ 'disabled' if not container.image_id else ('idle' if container.latest_scan_id else 'idle') }}',
+                            hasImageId: {{ 'true' if container.image_id else 'false' }},
+                            detailsUrl: '{{ url_for("view_scan_details", scan_id=container.latest_scan_id) if container.latest_scan_id else "" }}'
+                        }"
+                        id="row-{{ loop.index0 }}"  {# Unique row ID using loop.index0 #}
+                        data-image-id="{{ container.image_id }}" {# Data attribute for grouping by image_id #}
+                        @click="if (isScanned && detailsUrl && scanState !== 'scanning' && scanState !== 'queued' && scanState !== 'linked') window.location.href = detailsUrl"
+                        :class="{ 'hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer': isScanned && scanState !== 'scanning' && scanState !== 'queued' && scanState !== 'linked', 'hover:bg-gray-50 dark:hover:bg-gray-700': !isScanned }">
                         <td class="px-3 py-2 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200 align-middle">{{ container.name }}</td>
                         <td class="px-3 py-2 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200 align-middle">{{ container.image_name }}</td>
                         <td class="hidden md:table-cell px-3 py-2 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200 align-middle">{{ container.image_id }}</td>
                         <td class="px-3 py-2 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200 align-middle">{{ container.status }}</td>
                         <td class="hidden md:table-cell px-2 py-2 text-sm text-gray-500 dark:text-gray-400 align-middle">{{ container.created_at.strftime('%Y-%m-%d %H:%M') if container.created_at else 'N/A' }}</td>
-                        <td class="px-2 py-2 text-sm text-gray-500 dark:text-gray-400 align-middle text-center">
+                        <td class="px-2 py-2 text-sm text-gray-500 dark:text-gray-400 align-middle text-center scanned-status-icon-cell">
                             {% if container.last_scanned %}
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-green-500 dark:text-green-400 inline-block" viewBox="0 0 20 20" fill="currentColor">
                                     <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
@@ -42,7 +50,7 @@
                                 </svg>
                             {% endif %}
                         </td>
-                        <td class="px-2 py-2 text-sm">
+                        <td class="px-2 py-2 text-sm rsd-cell">
                             <div class="flex items-center space-x-1">
                                 {# Rootless Icon #}
                                 {% if container.is_rootless is true %}
@@ -90,7 +98,7 @@
                                 {% endif %}
                             </div>
                         </td>
-                        <td class="px-3 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 align-middle">
+                        <td class="px-3 py-2 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 align-middle vulnerabilities-cell">
                             {% if container.critical_count is not none and (container.critical_count + container.high_count + container.medium_count + container.low_count) > 0 %}
                                 {% if container.critical_count > 0 %}<span class="text-red-500 dark:text-red-400 font-semibold">C:{{ container.critical_count }}</span> {% endif %}
                                 {% if container.high_count > 0 %}<span class="text-orange-500 dark:text-orange-400 font-semibold">H:{{ container.high_count }}</span> {% endif %}
@@ -104,29 +112,43 @@
                         </td>
                         <td class="px-3 py-2 whitespace-nowrap text-sm font-medium align-middle">
                             <div class="flex items-center justify-end">
-                                {# {% if container.latest_scan_id %}
-                                    <a href="{{ url_for('view_scan_details', scan_id=container.latest_scan_id) }}" 
-                                       class="details-button bg-gray-500 hover:bg-gray-700 dark:bg-gray-600 dark:hover:bg-gray-500 text-white font-bold py-1 px-2 rounded text-xs w-16 h-7 inline-flex items-center justify-center"
-                                       title="View Scan Details">
-                                        Details
-                                    </a>
-                                {% endif %} #}
                                 <button
-                                    x-data="{ isLoading: false, hasImageId: {{ 'true' if container.image_id else 'false' }} }"
-                                    @click.stop="if(hasImageId) { isLoading = true; scanImage('{{ container.image_id }}').catch(() => { isLoading = false; }) }"
-                                    :disabled="isLoading || !hasImageId"
+                                    id="scan-button-{{ loop.index0 }}" {# Unique button ID using loop.index0 #}
+                                    @click.stop="if(hasImageId) { addToScanQueue('{{ container.image_id }}', rowLoopIndex) } else { console.log('No Image ID for button'); }"
+                                    :disabled="!hasImageId || scanState === 'scanning' || scanState === 'queued' || scanState === 'linked'"
                                     :class="{
-                                        'scan-button text-white font-bold py-1 px-2 rounded text-xs w-16 h-7 flex items-center justify-center': true,
-                                        'bg-blue-500 hover:bg-blue-700 dark:hover:bg-blue-600': hasImageId && !isLoading,
-                                        'bg-gray-400 dark:bg-gray-600 cursor-wait': isLoading,
+                                        'scan-button text-white font-bold py-1 px-2 rounded text-xs flex items-center justify-center': true,
+                                        'w-16 h-7': scanState !== 'scanning', // Fixed size for non-scanning states
+                                        'w-auto h-7 px-3': scanState === 'scanning', // Auto width for scanning state
+                                        'bg-blue-500 hover:bg-blue-700 dark:hover:bg-blue-600': scanState === 'idle' && hasImageId,
+                                        'bg-purple-500 cursor-wait': scanState === 'scanning',
+                                        'bg-yellow-500 cursor-wait': scanState === 'queued',
+                                        'bg-gray-400 dark:bg-gray-600 cursor-not-allowed': scanState === 'linked',
                                         'bg-blue-300 dark:bg-blue-800 cursor-not-allowed': !hasImageId
                                     }"
-                                    :title="!hasImageId ? 'Image ID not available' : (isLoading ? 'Scanning...' : 'Scan Image')">
-                                    <span x-show="!isLoading" class="button-text">Scan</span>
-                                    <svg x-show="isLoading" class="spinner h-4 w-4 animate-spin text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                    </svg>
+                                    :title="!hasImageId ? 'Image ID not available' : (scanState === 'scanning' ? 'Scanning...' : (scanState === 'queued' ? 'Queued for scan' : (scanState === 'linked' ? 'Processing via another row...' : (isScanned ? 'Re-scan Image' : 'Scan Image'))))">
+                                    
+                                    <template x-if="scanState === 'scanning'">
+                                        <div class="flex items-center justify-center">
+                                            <svg class="spinner h-4 w-4 animate-spin text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                            </svg>
+                                            <span class="button-text-spinner ml-1">Scanning</span>
+                                        </div>
+                                    </template>
+                                    <template x-if="scanState === 'queued'">
+                                        <span class="button-text">Queued</span>
+                                    </template>
+                                    <template x-if="scanState === 'linked'">
+                                        <span class="button-text">Linked</span>
+                                    </template>
+                                    <template x-if="scanState === 'idle'">
+                                        <span class="button-text" x-text="isScanned ? 'Re-Scan' : 'Scan'"></span>
+                                    </template>
+                                    <template x-if="scanState === 'disabled'">
+                                        <span class="button-text">Scan</span> {# Fallback for no imageId, button is disabled #}
+                                    </template>
                                 </button>
                             </div>
                         </td>
