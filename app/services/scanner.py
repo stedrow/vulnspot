@@ -2,7 +2,7 @@ import subprocess
 import json
 from datetime import datetime
 # Adjusting import paths based on the new structure
-from models.database import Scan, Vulnerability, VulnerabilityCounts 
+from models.database import Scan, Vulnerability, VulnerabilityCounts, Image as DBImage
 from models.schemas import ScanResult, VulnerabilityModel
 from sqlalchemy.orm import Session # For type hinting
 from logger import logger
@@ -85,6 +85,23 @@ def scan_image(image_id: str, db: Session, image_tar_path: str, image_name_with_
     new_scan.scan_status = "completed" # Update status after processing
     db.commit()
     
+    # Fetch the DBImage object to get analysis details
+    db_image_for_result = db.query(DBImage).filter(DBImage.id == image_id).first()
+    if not db_image_for_result:
+        logger.error(f"Could not find DBImage with id {image_id} when preparing ScanResult in scanner.py")
+        image_name_val = image_name_with_tag 
+        is_rootless_val, is_shellless_val, is_distroless_val = None, None, None
+        analysis_error_val, found_shell_path_val, dist_info_val, found_pkg_mgr_path_val = None, None, None, None
+    else:
+        image_name_val = f"{db_image_for_result.name}:{db_image_for_result.tag}" if db_image_for_result.tag else db_image_for_result.name
+        is_rootless_val = db_image_for_result.is_rootless
+        is_shellless_val = db_image_for_result.is_shellless
+        is_distroless_val = db_image_for_result.is_distroless
+        analysis_error_val = db_image_for_result.image_analysis_error
+        found_shell_path_val = db_image_for_result.found_shell_path
+        dist_info_val = db_image_for_result.distribution_info
+        found_pkg_mgr_path_val = db_image_for_result.found_package_manager_path
+
     # Prepare Pydantic models for the response
     vulnerabilities_pydantic_models = [VulnerabilityModel.from_orm(v) for v in vulnerabilities_db_models]
     
@@ -99,7 +116,17 @@ def scan_image(image_id: str, db: Session, image_tar_path: str, image_name_with_
         medium_count=counts['medium'],
         low_count=counts['low'],
         negligible_count=counts['negligible'],
-        unknown_count=counts['unknown']
+        unknown_count=counts['unknown'],
+        
+        # Add R/S/D fields from db_image_for_result
+        image_name=image_name_val,
+        is_rootless=is_rootless_val,
+        is_shellless=is_shellless_val,
+        is_distroless=is_distroless_val,
+        analysis_error=analysis_error_val,
+        found_shell_path=found_shell_path_val,
+        distribution_info=dist_info_val,
+        found_package_manager_path=found_pkg_mgr_path_val
     )
 
 def process_scan_result(scan_data, scan_id):

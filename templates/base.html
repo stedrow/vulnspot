@@ -32,31 +32,226 @@
     </footer>
     
     <script>
-        function scanImage(imageId) {
-            return new Promise((resolve, reject) => {
-                fetch(`/api/scan/${imageId}`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                })
-                .then(response => {
-                    if (!response.ok) {
-                        return response.json().then(err => { 
-                            throw new Error(err.detail || 'Scan initiation failed'); 
-                        });
+        let scanQueue = []; // Now stores objects: { imageId: string, primaryRowLoopIndex: number, imageIdSha: string }
+        let isScanInProgress = false;
+
+        // Syncs state across all Alpine components for a given imageId
+        function syncImageRowsState(imageId, primaryRowLoopIndex, newMasterState, scanData = null) {
+            const rows = document.querySelectorAll(`tr[data-image-id="${imageId}"]`);
+            rows.forEach(rowElement => {
+                let alpineData = Alpine.$data(rowElement);
+                if (alpineData) {
+                    if (alpineData.rowLoopIndex === primaryRowLoopIndex) {
+                        alpineData.scanState = newMasterState;
+                    } else {
+                        // Other rows for the same imageId become 'linked' or revert to 'idle' with master
+                        if (newMasterState === 'queued' || newMasterState === 'scanning') {
+                            alpineData.scanState = 'linked';
+                        } else { // idle, error, etc.
+                            alpineData.scanState = newMasterState; // typically 'idle'
+                        }
                     }
-                    return response.json();
-                })
-                .then(data => {
-                    location.reload(); 
-                    resolve(data);
-                })
-                .catch(error => {
-                    console.error('Error scanning image:', error);
-                    alert('Error scanning image: ' + error.message);
-                    reject(error);
+
+                    if (scanData && (newMasterState === 'idle' || newMasterState === 're-scan')) { // Ensure scanData is applied on completion
+                        alpineData.isScanned = true;
+                        if (scanData.scan_id) {
+                            alpineData.detailsUrl = `/scan-details/${scanData.scan_id}`;
+                        }
+                    }
+                     // If master state is error/reverted, linked items also revert to idle to allow new scan
+                    if (newMasterState === 'idle' && !scanData) { // Error case from catch block
+                        // No scanData, means it might be an error, revert to idle
+                        // isScanned state is tricky here, it might have been scanned before. 
+                        // Keep existing isScanned unless scanData explicitly updates it.
+                    }
+                }
+            });
+        }
+
+        function addToScanQueue(imageId, clickedRowLoopIndex) {
+            if (!imageId) return;
+
+            // Check if this imageId is already actively being processed or in the global queue by any row
+            let imageAlreadyActive = false;
+            const existingQueueItem = scanQueue.find(item => item.imageId === imageId);
+            if (existingQueueItem) {
+                imageAlreadyActive = true;
+            }
+            if (!imageAlreadyActive) {
+                 const allRowsForImage = document.querySelectorAll(`tr[data-image-id="${imageId}"]`);
+                 allRowsForImage.forEach(rowEl => {
+                     const alpineData = Alpine.$data(rowEl);
+                     if (alpineData && (alpineData.scanState === 'scanning' || alpineData.scanState === 'queued')) {
+                         imageAlreadyActive = true;
+                         // If this clicked row is not the one already active, mark it linked.
+                         if(alpineData.rowLoopIndex !== clickedRowLoopIndex) {
+                             syncImageRowsState(imageId, alpineData.rowLoopIndex, alpineData.scanState); // Mark clicked as linked to existing active
+                         }
+                         // If the clicked row IS the one that is already active, do nothing (button is disabled).
+                     }
+                 });
+            }
+
+            if (imageAlreadyActive) {
+                console.log(`Image ${imageId} is already being processed or in queue.`);
+                // If the clicked button itself is not the primary active one, its state should become 'linked'.
+                // This is partially handled by the loop above if it finds an active primary.
+                // Explicitly ensure the clicked one becomes linked if it's not already the active primary.
+                const clickedRowAlpine = Alpine.$data(document.getElementById(`row-${clickedRowLoopIndex}`));
+                if (clickedRowAlpine && clickedRowAlpine.scanState !== 'queued' && clickedRowAlpine.scanState !== 'scanning') {
+                    clickedRowAlpine.scanState = 'linked';
+                }
+                return;
+            }
+            
+            // Add to queue as an object
+            scanQueue.push({ imageId: imageId, primaryRowLoopIndex: clickedRowLoopIndex });
+            syncImageRowsState(imageId, clickedRowLoopIndex, 'queued');
+            processScanQueue();
+        }
+
+        function generateRsdIconSvg(type, status, detail = '') {
+            let svgClass = 'h-4 w-4 inline-block';
+            let title = '';
+            let paths = '';
+            const typeCapitalized = type.charAt(0).toUpperCase() + type.slice(1);
+
+            if (status === true) {
+                svgClass += ' text-green-600 dark:text-green-400';
+                title = `${typeCapitalized}: Yes`;
+                paths = `<path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />`;
+                return `<svg xmlns="http://www.w3.org/2000/svg" class="${svgClass}" viewBox="0 0 20 20" fill="currentColor" title="${title}">${paths}</svg>`;
+            } else if (status === false) {
+                svgClass += ' text-red-600 dark:text-red-400';
+                title = `${typeCapitalized}: No` + (detail ? ` (${detail})` : '');
+                paths = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />`;
+                return `<svg class="${svgClass}" fill="none" viewBox="0 0 24 24" stroke="currentColor" title="${title}">${paths}</svg>`;
+            } else { // null or undefined for status means unknown or error
+                svgClass += ' text-gray-500 dark:text-gray-400';
+                title = `${typeCapitalized}: ${detail || 'Analysis pending/unknown'}`;
+                paths = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.755 4 3.92 0 1.212-.779 2.298-1.97 2.768V15a1 1 0 01-1 1h-2a1 1 0 01-1-1v-.538c-1.19-.47-1.97-1.556-1.97-2.768 0-2.165 1.79-3.92 4-3.92zm0 0c0-1.044.856-1.899 1.9-1.899s1.9.855 1.9 1.899m-3.8 0h3.8m-3.8 0a1.9 1.9 0 00-1.9 1.9m3.8 0a1.9 1.9 0 011.9-1.9m0 0a1.9 1.9 0 001.9 1.9m-1.9-1.9a1.9 1.9 0 01-1.9 1.9m5.7 0a9 9 0 11-18 0 9 9 0 0118 0z" />`;
+                return `<svg class="${svgClass}" fill="none" viewBox="0 0 24 24" stroke="currentColor" title="${title}">${paths}</svg>`;
+            }
+        }
+
+        function processScanQueue() {
+            if (isScanInProgress || scanQueue.length === 0) {
+                return;
+            }
+            isScanInProgress = true;
+            const queueItem = scanQueue.shift(); 
+            const imageIdToScan = queueItem.imageId;
+            const primaryRowIdx = queueItem.primaryRowLoopIndex;
+            
+            syncImageRowsState(imageIdToScan, primaryRowIdx, 'scanning');
+
+            fetch(`/api/scan/${imageIdToScan}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(err => { 
+                        throw new Error(err.detail || 'Scan initiation failed'); 
+                    });
+                }
+                return response.json(); 
+            })
+            .then(data => {
+                syncImageRowsState(imageIdToScan, primaryRowIdx, 'idle', data);
+                
+                // Update UI for ALL rows associated with this imageId
+                const rowsToUpdate = document.querySelectorAll(`tr[data-image-id="${imageIdToScan}"]`);
+                rowsToUpdate.forEach(rowElement => {
+                    // Update "Scanned" icon
+                    const scannedIconCell = rowElement.querySelector('.scanned-status-icon-cell');
+                    if (scannedIconCell) {
+                        scannedIconCell.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-green-500 dark:text-green-400 inline-block" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>`;
+                    }
+
+                    // Update Vulnerability counts
+                    const vulnCell = rowElement.querySelector('.vulnerabilities-cell');
+                    if (vulnCell && data.hasOwnProperty('critical_count')) { 
+                        let vulnHtml = '';
+                        const C = parseInt(data.critical_count) || 0;
+                        const H = parseInt(data.high_count) || 0;
+                        const M = parseInt(data.medium_count) || 0;
+                        const L = parseInt(data.low_count) || 0;
+
+                        if (C > 0) vulnHtml += `<span class="text-red-500 dark:text-red-400 font-semibold">C:${C}</span> `;
+                        if (H > 0) vulnHtml += `<span class="text-orange-500 dark:text-orange-400 font-semibold">H:${H}</span> `;
+                        if (M > 0) vulnHtml += `<span class="text-yellow-500 dark:text-yellow-400">M:${M}</span> `;
+                        if (L > 0) vulnHtml += `<span class="text-blue-500 dark:text-blue-400">L:${L}</span>`;
+
+                        if (C + H + M + L === 0) {
+                            vulnHtml = `<span class="text-green-500 dark:text-green-400">Clean</span>`;
+                        } else if (vulnHtml === '') {
+                            vulnHtml = `<span class="text-green-500 dark:text-green-400">Clean</span>`;
+                        }
+                        vulnCell.innerHTML = vulnHtml;
+                    } else if (vulnCell) {
+                        vulnCell.innerHTML = 'N/A';
+                    }
+
+                    // Update R/S/D Icons
+                    const rsdCell = rowElement.querySelector('td.rsd-cell');
+                    if (!rsdCell) {
+                        return; 
+                    }
+                    const rsdCellDiv = rsdCell.querySelector('div.flex');
+                    if (!rsdCellDiv) {
+                        return; 
+                    }
+
+                    if (data.hasOwnProperty('is_rootless') && 
+                        data.hasOwnProperty('is_shellless') && 
+                        data.hasOwnProperty('is_distroless')) {
+                        
+                        let rsdHtml = '';
+                        
+                        // Rootless
+                        let rootlessStatus = data.is_rootless;
+                        let rootlessDetail = (rootlessStatus === null || typeof rootlessStatus === 'undefined') ? (data.analysis_error || '') : '';
+                        rsdHtml += generateRsdIconSvg('rootless', rootlessStatus, rootlessDetail);
+                        rsdHtml += '<span class="text-gray-400 dark:text-gray-500">/</span>';
+                        
+                        // Shell-less
+                        let shelllessStatus = data.is_shellless;
+                        let shelllessDetail = '';
+                        if (shelllessStatus === false && data.hasOwnProperty('found_shell_path')) {
+                            shelllessDetail = data.found_shell_path;
+                        } else if (shelllessStatus === null || typeof shelllessStatus === 'undefined') {
+                            shelllessDetail = data.analysis_error || '';
+                        }
+                        rsdHtml += generateRsdIconSvg('shellless', shelllessStatus, shelllessDetail);
+                        rsdHtml += '<span class="text-gray-400 dark:text-gray-500">/</span>';
+
+                        // Distroless
+                        let distrolessStatus = data.is_distroless;
+                        let distrolessDetail = '';
+                        if (distrolessStatus === false && data.hasOwnProperty('distribution_info')) {
+                            distrolessDetail = data.distribution_info;
+                        } else if (distrolessStatus === null || typeof distrolessStatus === 'undefined') {
+                            distrolessDetail = data.analysis_error || '';
+                        }
+                        rsdHtml += generateRsdIconSvg('distroless', distrolessStatus, distrolessDetail);
+                        
+                        rsdCellDiv.innerHTML = rsdHtml;
+                    } else {
+                        // console.warn(`[${rowElement.id}] R/S/D Update: Missing one or more key R/S/D properties (is_rootless, is_shellless, is_distroless) in API data. Cell not updated. Data:`, data);
+                        // rsdCellDiv.innerHTML = '<span class="text-xs text-gray-500">R/S/D N/A</span>'; 
+                    }
                 });
+
+                isScanInProgress = false;
+                processScanQueue();
+            })
+            .catch(error => {
+                console.error('Error scanning image:', imageIdToScan, error);
+                alert('Error scanning image ' + imageIdToScan + ': ' + error.message);
+                syncImageRowsState(imageIdToScan, primaryRowIdx, 'idle'); 
+                isScanInProgress = false;
+                processScanQueue();
             });
         }
     </script>
