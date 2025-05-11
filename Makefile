@@ -18,7 +18,7 @@ run: run-dev
 run-dev:
 	@echo "Starting $(APP_NAME) development server with docker-compose (reload enabled)..."
 	@echo "Access at http://localhost:8000"
-	docker-compose up --build
+	docker-compose -f docker-compose.dev.yml up --build
 
 # Stop the docker-compose services
 stop:

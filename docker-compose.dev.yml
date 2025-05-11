@@ -13,13 +13,17 @@ services:
       - socket-proxy:/run/proxy
 
   vulnspot:
-    image: ghcr.io/stedrow/vulnspot:latest
     container_name: vulnspot
+    build:
+      context: .
+      dockerfile: Dockerfile
     ports:
       - "8000:8000"
     volumes:
       - socket-proxy:/var/run
       - ./data:/app/data
+      - ./app:/app  # Mount app directory for development
+      - ./templates:/app/templates  # Mount templates directory for development
     environment:
       - DATABASE_URL=sqlite:////app/data/vuln_scanner.db # Set for Docker to use path inside container
     restart: unless-stopped
