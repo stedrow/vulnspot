@@ -12,9 +12,9 @@ services:
       - /run/docker.sock:/run/docker.sock:ro
       - socket-proxy:/run/proxy
 
-  vulnspot:
-    image: ghcr.io/stedrow/vulnspot:0.0.1
-    container_name: vulnspot
+  grypeui:
+    image: ghcr.io/stedrow/grypeui:0.0.1
+    container_name: grypeui
     ports:
       - "8000:8000"
     volumes:

@@ -3,9 +3,9 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session # Added Session for type hinting
 from sqlalchemy.ext.declarative import declarative_base
-from models.database import Base # Corrected import: removed vulnspot.
+from models.database import Base # Corrected import: removed grypeui.
 
-# Path to the project root (vulnspot directory)
+# Path to the project root (grypeui directory)
 # __file__ is app/database.py
 # Path(__file__).resolve().parent is app/
 # Path(__file__).resolve().parent.parent is project root.
@@ -15,7 +15,7 @@ DB_DIR = PROJECT_ROOT / "data" # This will be /app/data in the container
 # DATABASE_URL is expected to be set in the Docker environment (e.g., docker-compose.yml)
 # Fallback to a default path inside the container if it's not set for some reason.
 SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{DB_DIR}/vuln_scanner.db")
-print(f"VulnSpot DB: Using database URL: {SQLALCHEMY_DATABASE_URL}")
+print(f"GrypeUI DB: Using database URL: {SQLALCHEMY_DATABASE_URL}")
 
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False} # check_same_thread for SQLite

@@ -533,7 +533,7 @@ wheels = [
 ]
 
 [[package]]
-name = "vulnspot"
+name = "grypeui"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

@@ -1,6 +1,6 @@
 .PHONY: default build run run-dev stop clean test
 
-APP_NAME := vulnspot
+APP_NAME := grypeui
 PYTHON_INTERPRETER := python3
 
 # Default target when just `make` is run
