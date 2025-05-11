@@ -5,6 +5,9 @@ services:
     read_only: true
     user: "0:0"  # make sure to use the same UID/GID as the owner of your docker socket!
     restart: always
+    environment:
+      - SOCKET_PROXY_UID=65532 # nonroot, used by sherpa-dns image
+      - SOCKET_PROXY_GID=65532 # nonroot, used by sherpa-dns image
     volumes:
       - /run/docker.sock:/run/docker.sock:ro
       - socket-proxy:/run/proxy

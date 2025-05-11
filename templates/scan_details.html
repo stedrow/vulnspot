@@ -95,25 +95,50 @@
     </div>
 
     <!-- Vulnerability Summary Section -->
-    <div class="mb-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-md">
+    <div class="mb-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-md" x-data="{ activeFilter: null }">
         <h2 class="text-lg font-semibold text-gray-700 dark:text-gray-200 mb-2">Vulnerability Summary</h2>
         <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 text-center">
-            <div class="severity-filter-card p-2 bg-red-200 dark:bg-red-700 rounded cursor-pointer hover:ring-2 hover:ring-red-400" data-severity-filter="critical"><span class="font-bold text-red-700 dark:text-red-100">{{ scan_result.critical_count }}</span> Critical</div>
-            <div class="severity-filter-card p-2 bg-orange-200 dark:bg-orange-700 rounded cursor-pointer hover:ring-2 hover:ring-orange-400" data-severity-filter="high"><span class="font-bold text-orange-700 dark:text-orange-100">{{ scan_result.high_count }}</span> High</div>
-            <div class="severity-filter-card p-2 bg-yellow-200 dark:bg-yellow-700 rounded cursor-pointer hover:ring-2 hover:ring-yellow-400" data-severity-filter="medium"><span class="font-bold text-yellow-700 dark:text-yellow-100">{{ scan_result.medium_count }}</span> Medium</div>
-            <div class="severity-filter-card p-2 bg-blue-200 dark:bg-blue-700 rounded cursor-pointer hover:ring-2 hover:ring-blue-400" data-severity-filter="low"><span class="font-bold text-blue-700 dark:text-blue-100">{{ scan_result.low_count }}</span> Low</div>
-            <div class="severity-filter-card p-2 bg-gray-300 dark:bg-gray-500 rounded cursor-pointer hover:ring-2 hover:ring-gray-400" data-severity-filter="negligible"><span class="font-bold text-gray-700 dark:text-gray-100">{{ scan_result.negligible_count }}</span> Negligible</div>
-            <div class="severity-filter-card p-2 bg-gray-400 dark:bg-gray-400 rounded cursor-pointer hover:ring-2 hover:ring-gray-300" data-severity-filter="unknown"><span class="font-bold text-gray-800 dark:text-gray-900">{{ scan_result.unknown_count }}</span> Unknown</div>
-        </div>
-        <div class="mt-3 text-center">
-            <button id="clear-severity-filter" class="bg-gray-300 hover:bg-gray-400 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-800 dark:text-gray-200 font-bold py-1 px-3 rounded text-xs">
-                Show All / Clear Filter
-            </button>
+            <div class="severity-filter-card p-2 bg-red-200 dark:bg-red-700 rounded cursor-pointer"
+                 @click="if (activeFilter === 'critical') { activeFilter = null; filterBySeverity(null); } else { activeFilter = 'critical'; filterBySeverity('critical'); }"
+                 :class="{ 'ring-2 ring-offset-2 dark:ring-offset-gray-800 ring-red-500': activeFilter === 'critical', 'hover:ring-2 hover:ring-red-400': activeFilter !== 'critical' }">
+                <span class="font-bold text-red-700 dark:text-red-100">{{ scan_result.critical_count }}</span> Critical
+            </div>
+            <div class="severity-filter-card p-2 bg-orange-200 dark:bg-orange-700 rounded cursor-pointer"
+                 @click="if (activeFilter === 'high') { activeFilter = null; filterBySeverity(null); } else { activeFilter = 'high'; filterBySeverity('high'); }"
+                 :class="{ 'ring-2 ring-offset-2 dark:ring-offset-gray-800 ring-orange-500': activeFilter === 'high', 'hover:ring-2 hover:ring-orange-400': activeFilter !== 'high' }">
+                <span class="font-bold text-orange-700 dark:text-orange-100">{{ scan_result.high_count }}</span> High
+            </div>
+            <div class="severity-filter-card p-2 bg-yellow-200 dark:bg-yellow-700 rounded cursor-pointer"
+                 @click="if (activeFilter === 'medium') { activeFilter = null; filterBySeverity(null); } else { activeFilter = 'medium'; filterBySeverity('medium'); }"
+                 :class="{ 'ring-2 ring-offset-2 dark:ring-offset-gray-800 ring-yellow-500': activeFilter === 'medium', 'hover:ring-2 hover:ring-yellow-400': activeFilter !== 'medium' }">
+                <span class="font-bold text-yellow-700 dark:text-yellow-100">{{ scan_result.medium_count }}</span> Medium
+            </div>
+            <div class="severity-filter-card p-2 bg-blue-200 dark:bg-blue-700 rounded cursor-pointer"
+                 @click="if (activeFilter === 'low') { activeFilter = null; filterBySeverity(null); } else { activeFilter = 'low'; filterBySeverity('low'); }"
+                 :class="{ 'ring-2 ring-offset-2 dark:ring-offset-gray-800 ring-blue-500': activeFilter === 'low', 'hover:ring-2 hover:ring-blue-400': activeFilter !== 'low' }">
+                <span class="font-bold text-blue-700 dark:text-blue-100">{{ scan_result.low_count }}</span> Low
+            </div>
+            <div class="severity-filter-card p-2 bg-gray-300 dark:bg-gray-500 rounded cursor-pointer"
+                 @click="if (activeFilter === 'negligible') { activeFilter = null; filterBySeverity(null); } else { activeFilter = 'negligible'; filterBySeverity('negligible'); }"
+                 :class="{ 'ring-2 ring-offset-2 dark:ring-offset-gray-800 ring-gray-500': activeFilter === 'negligible', 'hover:ring-2 hover:ring-gray-400': activeFilter !== 'negligible' }">
+                <span class="font-bold text-gray-700 dark:text-gray-100">{{ scan_result.negligible_count }}</span> Negligible
+            </div>
+            <div class="severity-filter-card p-2 bg-gray-400 dark:bg-gray-400 rounded cursor-pointer"
+                 @click="if (activeFilter === 'unknown') { activeFilter = null; filterBySeverity(null); } else { activeFilter = 'unknown'; filterBySeverity('unknown'); }"
+                 :class="{ 'ring-2 ring-offset-2 dark:ring-offset-gray-800 ring-gray-600': activeFilter === 'unknown', 'hover:ring-2 hover:ring-gray-300': activeFilter !== 'unknown' }">
+                <span class="font-bold text-gray-800 dark:text-gray-900">{{ scan_result.unknown_count }}</span> Unknown
+            </div>
         </div>
     </div>
 
     <div id="vulnerabilities-table-area">
-        <h2 class="text-xl font-semibold text-gray-800 dark:text-gray-100 mb-3">Vulnerabilities Found (<span class="list-count">{{ scan_result.vulnerabilities|length }}</span>)</h2>
+        <h2 class="text-xl font-semibold text-gray-800 dark:text-gray-100 mb-3">
+            {% if scan_result.vulnerabilities and scan_result.vulnerabilities|length > 0 %}
+                Vulnerabilities Found (<span class="list-count">{{ scan_result.vulnerabilities|length }}</span>)
+            {% else %}
+                No Vulnerabilities Found
+            {% endif %}
+        </h2>
         
         <div class="mb-4">
             <input type="text" class="fuzzy-search bg-white dark:bg-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-md py-2 px-3 w-full md:w-1/3" placeholder="Search vulnerabilities..." />
@@ -123,18 +148,21 @@
             <table class="min-w-full table-auto" id="vulnerabilities-table">
                 <thead class="bg-gray-200 dark:bg-gray-700">
                     <tr>
+                        {# <th class="px-2 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-10"></th> #} {# Removed for expand icon #}
                         <th class="sort px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer" data-sort="vuln-id"><span>ID</span><span>⇅</span></th>
                         <th class="sort px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer" data-sort="vuln-severity"><span>Severity</span><span>⇅</span></th>
                         <th class="sort px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer" data-sort="vuln-package"><span>Package</span><span>⇅</span></th>
                         <th class="sort px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer" data-sort="vuln-version"><span>Version</span><span>⇅</span></th>
                         <th class="sort px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer" data-sort="vuln-fixed"><span>Fixed In</span><span>⇅</span></th>
-                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Description</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Description</th> {# Restored #}
                     </tr>
                 </thead>
                 <tbody class="list bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                     {% if scan_result.vulnerabilities %}
                         {% for vuln in scan_result.vulnerabilities %}
-                        <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                        {# Removed x-data from here #}
+                        <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 main-vuln-row">
+                            {# Removed expander TD #}
                             <td class="vuln-id px-4 py-2 text-sm text-gray-900 dark:text-gray-200 font-mono">
                                 {% if vuln.vulnerability_id and vuln.vulnerability_id.lower().startswith('cve-') %}
                                     <a href="https://nvd.nist.gov/vuln/detail/{{ vuln.vulnerability_id }}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:underline">
@@ -144,7 +172,7 @@
                                     {{ vuln.vulnerability_id }}
                                 {% endif %}
                             </td>
-                            <td class="vuln-severity px-4 py-2 whitespace-nowrap text-sm 
+                            <td class="vuln-severity vuln-severity-raw px-4 py-2 whitespace-nowrap text-sm 
                                 {% if vuln.severity == 'critical' %}text-red-500 dark:text-red-400 font-semibold
                                 {% elif vuln.severity == 'high' %}text-orange-500 dark:text-orange-400 font-semibold
                                 {% elif vuln.severity == 'medium' %}text-yellow-500 dark:text-yellow-400
@@ -156,8 +184,9 @@
                             <td class="vuln-package px-4 py-2 text-sm text-gray-900 dark:text-gray-200">{{ vuln.package_name }}</td>
                             <td class="vuln-version px-4 py-2 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">{{ vuln.installed_version }}</td>
                             <td class="vuln-fixed px-4 py-2 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">{{ vuln.fixed_version if vuln.fixed_version else 'N/A' }}</td>
-                            <td class="vuln-description px-4 py-2 text-sm text-gray-500 dark:text-gray-400 break-words">{{ vuln.description if vuln.description else 'N/A' }}</td>
+                            <td class="vuln-description px-4 py-2 text-sm text-gray-500 dark:text-gray-400 break-words">{{ vuln.description if vuln.description else 'N/A' }}</td> {# Restored #}
                         </tr>
+                        {# Removed the x-show details row #}
                         {% endfor %}
                     {% else %}
                         <tr>
@@ -180,6 +209,20 @@
 {{ super() }} 
 <script src="//cdnjs.cloudflare.com/ajax/libs/list.js/2.3.1/list.min.js"></script>
 <script>
+    var vulnerabilityList; // Declare for global access by filterBySeverity
+
+    function filterBySeverity(severityToFilter) {
+        if (!vulnerabilityList) return;
+        if (severityToFilter) {
+            vulnerabilityList.filter(function(item) {
+                // Ensure 'vuln-severity-raw' is available in item values
+                return item.values()['vuln-severity-raw'] === severityToFilter;
+            });
+        } else {
+            vulnerabilityList.filter(); // Clear the filter
+        }
+    }
+
     document.addEventListener('DOMContentLoaded', function() {
         const severityOrder = {
             'critical': 0,
@@ -194,16 +237,17 @@
             valueNames: [
                 'vuln-id',
                 { name: 'vuln-severity', attr: 'data-severity' }, 
+                { name: 'vuln-severity-raw', attr: 'data-raw-severity'}, 
                 'vuln-package',
                 'vuln-version',
                 'vuln-fixed',
-                'vuln-description' // Added for search, not for sorting by default
+                'vuln-description' // Restored for List.js searching/sorting
             ],
             fuzzySearch: {
                 searchClass: "fuzzy-search",
                 location: 0,
                 distance: 100,
-                threshold: 0.3, // Made threshold a bit stricter
+                threshold: 0.3, 
                 multiSearch: true
             }
         };
@@ -214,12 +258,13 @@
             if (severityCell) {
                 const severityText = severityCell.textContent.trim().toLowerCase();
                 severityCell.setAttribute('data-severity', severityOrder[severityText] !== undefined ? severityOrder[severityText] : 99);
+                severityCell.setAttribute('data-raw-severity', severityText); // Store raw severity string
             }
         });
 
         const vulnerabilitiesTableArea = document.getElementById('vulnerabilities-table-area');
         if (vulnerabilitiesTableArea && tableRows.length > 0) {
-            var vulnerabilityList = new List('vulnerabilities-table-area', options);
+            vulnerabilityList = new List('vulnerabilities-table-area', options); // Assign to global
             
             const countElement = vulnerabilitiesTableArea.querySelector('.list-count');
             if(countElement) {
@@ -237,58 +282,9 @@
                 }
             });
 
-            // Severity card filtering
-            const filterCards = document.querySelectorAll('.severity-filter-card');
-            let activeFilterCard = null;
+            // Severity card filtering (Old JavaScript logic is removed by omission here)
+            // The old const filterCards = ... and clearButton.addEventListener logic is now handled by Alpine.js
 
-            filterCards.forEach(card => {
-                card.addEventListener('click', function() {
-                    const filterSeverity = this.dataset.severityFilter;
-
-                    // Remove active style from previously active card
-                    if (activeFilterCard) {
-                        activeFilterCard.classList.remove('ring-2', 'ring-offset-2', 'dark:ring-offset-gray-800');
-                        activeFilterCard.classList.remove('ring-' + activeFilterCard.dataset.severityFilter + '-500'); // General color, might need specific mapping if colors differ a lot
-                         // A more robust way to remove specific ring color if it was dynamic:
-                        const colors = ['red', 'orange', 'yellow', 'blue', 'gray']; // Match these with your card bg/ring colors
-                        colors.forEach(color => activeFilterCard.classList.remove('ring-' + color + '-500', 'dark:ring-' + color + '-400'));
-
-                    }
-                    
-                    vulnerabilityList.filter(function(item) {
-                        const itemSeverityCell = item.elm.querySelector('.vuln-severity');
-                        if (itemSeverityCell) {
-                            return itemSeverityCell.textContent.trim().toLowerCase() === filterSeverity;
-                        }
-                        return false;
-                    });
-
-                    // Add active style to current card
-                    this.classList.add('ring-2', 'ring-offset-2', 'dark:ring-offset-gray-800');
-                     // Add a specific ring color based on severity. You might need to adjust these classes.
-                    const ringColorClass = 'ring-' + filterSeverity + '-500'; // Example, adjust if needed
-                    const darkRingColorClass = 'dark:ring-' + filterSeverity + '-400'; // Example
-                    this.classList.add(ringColorClass, darkRingColorClass);
-
-
-                    activeFilterCard = this;
-                });
-            });
-
-            const clearFilterButton = document.getElementById('clear-severity-filter');
-            clearFilterButton.addEventListener('click', function() {
-                vulnerabilityList.filter(); // Remove all filters
-                if (activeFilterCard) {
-                    // A more robust way to remove specific ring color:
-                    const colors = ['red', 'orange', 'yellow', 'blue', 'gray']; // Match these with your card bg/ring colors
-                    colors.forEach(color => activeFilterCard.classList.remove('ring-' + color + '-500', 'dark:ring-' + color + '-400'));
-                    activeFilterCard.classList.remove('ring-2', 'ring-offset-2', 'dark:ring-offset-gray-800');
-                    activeFilterCard = null;
-                }
-            });
-
-        } else {
-            // console.log("List.js: Table area or rows not found, or no vulnerabilities to list.");
         }
     });
 </script>
