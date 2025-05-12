@@ -163,7 +163,7 @@
                         {# Removed x-data from here #}
                         <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 main-vuln-row">
                             {# Removed expander TD #}
-                            <td class="vuln-id px-4 py-2 text-sm text-gray-900 dark:text-gray-200 font-mono">
+                            <td class="vuln-id px-4 py-2 text-sm text-gray-900 dark:text-gray-200 font-mono text-left align-top">
                                 {% if vuln.vulnerability_id and vuln.vulnerability_id.lower().startswith('cve-') %}
                                     <a href="https://nvd.nist.gov/vuln/detail/{{ vuln.vulnerability_id }}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:underline">
                                         {{ vuln.vulnerability_id }}
@@ -172,7 +172,7 @@
                                     {{ vuln.vulnerability_id }}
                                 {% endif %}
                             </td>
-                            <td class="vuln-severity vuln-severity-raw px-4 py-2 whitespace-nowrap text-sm 
+                            <td class="vuln-severity vuln-severity-raw px-4 py-2 whitespace-nowrap text-sm text-left align-top
                                 {% if vuln.severity == 'critical' %}text-red-500 dark:text-red-400 font-semibold
                                 {% elif vuln.severity == 'high' %}text-orange-500 dark:text-orange-400 font-semibold
                                 {% elif vuln.severity == 'medium' %}text-yellow-500 dark:text-yellow-400
@@ -181,10 +181,10 @@
                             ">
                                 {{ vuln.severity|capitalize }}
                             </td>
-                            <td class="vuln-package px-4 py-2 text-sm text-gray-900 dark:text-gray-200">{{ vuln.package_name }}</td>
-                            <td class="vuln-version px-4 py-2 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">{{ vuln.installed_version }}</td>
-                            <td class="vuln-fixed px-4 py-2 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200">{{ vuln.fixed_version if vuln.fixed_version else 'N/A' }}</td>
-                            <td class="vuln-description px-4 py-2 text-sm text-gray-500 dark:text-gray-400 break-words">{{ vuln.description if vuln.description else 'N/A' }}</td> {# Restored #}
+                            <td class="vuln-package px-4 py-2 text-sm text-gray-900 dark:text-gray-200 text-left align-top">{{ vuln.package_name }}</td>
+                            <td class="vuln-version px-4 py-2 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200 text-left align-top">{{ vuln.installed_version }}</td>
+                            <td class="vuln-fixed px-4 py-2 whitespace-nowrap text-sm text-gray-900 dark:text-gray-200 text-left align-top">{{ vuln.fixed_version if vuln.fixed_version else 'N/A' }}</td>
+                            <td class="vuln-description px-4 py-2 text-sm text-gray-500 dark:text-gray-400 break-words text-left align-top">{{ vuln.description if vuln.description else 'N/A' }}</td> {# Restored #}
                         </tr>
                         {# Removed the x-show details row #}
                         {% endfor %}
