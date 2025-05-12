@@ -68,6 +68,64 @@
             });
         }
 
+        function scanAllImages() {
+            console.log("Scan All Images button clicked.");
+            const scanAllButton = document.getElementById('scan-all-button');
+            if (!scanAllButton) {
+                console.error("'scan-all-button' not found in the DOM!");
+                return;
+            }
+
+            let alpineButtonData = Alpine.$data(scanAllButton);
+            if (alpineButtonData) {
+                alpineButtonData.scanningAll = true;
+            } else {
+                console.warn("Could not retrieve Alpine data for 'scan-all-button'. Text update might fail. Ensure button has x-data.");
+                // As a fallback, you might try to set text directly, but this isn't reactive:
+                // scanAllButton.textContent = 'Scanning...'; 
+            }
+
+            const rows = document.querySelectorAll('tbody tr[data-image-id]');
+            let imagesQueuedByThisAction = 0;
+
+            rows.forEach(rowElement => {
+                const rowAlpineData = Alpine.$data(rowElement);
+                const imageIdFromDataset = rowElement.dataset.imageId; // Correct way to get imageId
+
+                if (rowAlpineData && imageIdFromDataset && rowAlpineData.hasImageId) {
+                    const isAlreadyInGlobalQueue = scanQueue.some(item => item.imageId === imageIdFromDataset);
+                    const isRowAlreadyProcessing = rowAlpineData.scanState === 'scanning' ||
+                                                 rowAlpineData.scanState === 'queued' ||
+                                                 rowAlpineData.scanState === 'linked';
+
+                    // console.log(`Row ${rowAlpineData.rowLoopIndex}: imageId=${imageIdFromDataset}, scanState=${rowAlpineData.scanState}, isAlreadyInGlobalQueue=${isAlreadyInGlobalQueue}, isRowAlreadyProcessing=${isRowAlreadyProcessing}`);
+
+                    if (!isAlreadyInGlobalQueue && !isRowAlreadyProcessing) {
+                        console.log(`Scan All: Adding to queue - Image ID: ${imageIdFromDataset}, Row Index: ${rowAlpineData.rowLoopIndex}`);
+                        addToScanQueue(imageIdFromDataset, rowAlpineData.rowLoopIndex); // imageIdFromDataset is now correct
+                        imagesQueuedByThisAction++;
+                    } else {
+                        // console.log(`Scan All: Skipping image ${imageIdFromDataset} (row ${rowAlpineData.rowLoopIndex}), already processing or in queue.`);
+                    }
+                } else {
+                    let logMsg = `Scan All: Skipping row (ID: ${rowElement.id}). Reason: `;
+                    if (!rowAlpineData) logMsg += "Missing Alpine data. ";
+                    if (!imageIdFromDataset) logMsg += "Missing imageId in dataset. ";
+                    if (rowAlpineData && !rowAlpineData.hasImageId) logMsg += "Alpine data 'hasImageId' is false. ";
+                    console.log(logMsg);
+                }
+            });
+
+            if (imagesQueuedByThisAction === 0) {
+                 console.log("Scan All: No new images were added to the scan queue. Resetting button state if applicable.");
+                 if (alpineButtonData && alpineButtonData.scanningAll) {
+                    alpineButtonData.scanningAll = false;
+                }
+            }
+            // Note: The 'scanningAll' state will also be reset to false by processScanQueue/addToScanQueue 
+            // when the main queue is empty and no scans are in progress.
+        }
+
         function addToScanQueue(imageId, clickedRowLoopIndex) {
             if (!imageId) return;
 
@@ -108,6 +166,19 @@
             scanQueue.push({ imageId: imageId, primaryRowLoopIndex: clickedRowLoopIndex });
             syncImageRowsState(imageId, clickedRowLoopIndex, 'queued');
             processScanQueue();
+
+            // Check if the main scan queue is empty and no scan is in progress, then reset scanAll button
+            // This is a simple way to reset the button. A more robust way would involve tracking scans initiated by "Scan All"
+            if (scanQueue.length === 0 && !isScanInProgress) {
+                const scanAllButton = document.getElementById('scan-all-button');
+                if (scanAllButton) {
+                    let alpineButtonData = Alpine.$data(scanAllButton);
+                    if (alpineButtonData && alpineButtonData.scanningAll) {
+                        alpineButtonData.scanningAll = false;
+                        console.log("Scan All button reset as queue is empty and no scan in progress.");
+                    }
+                }
+            }
         }
 
         function generateRsdIconSvg(type, status, detail = '') {
@@ -245,6 +316,18 @@
 
                 isScanInProgress = false;
                 processScanQueue();
+
+                // Also reset scanAll button if an error occurs and the queue becomes empty
+                if (scanQueue.length === 0 && !isScanInProgress) {
+                    const scanAllButton = document.getElementById('scan-all-button');
+                    if (scanAllButton) {
+                        let alpineButtonData = Alpine.$data(scanAllButton);
+                        if (alpineButtonData && alpineButtonData.scanningAll) {
+                            alpineButtonData.scanningAll = false;
+                            console.log("Scan All button reset due to error and empty queue.");
+                        }
+                    }
+                }
             })
             .catch(error => {
                 console.error('Error scanning image:', imageIdToScan, error);
@@ -252,6 +335,18 @@
                 syncImageRowsState(imageIdToScan, primaryRowIdx, 'idle'); 
                 isScanInProgress = false;
                 processScanQueue();
+
+                // Also reset scanAll button if an error occurs and the queue becomes empty
+                if (scanQueue.length === 0 && !isScanInProgress) {
+                    const scanAllButton = document.getElementById('scan-all-button');
+                    if (scanAllButton) {
+                        let alpineButtonData = Alpine.$data(scanAllButton);
+                        if (alpineButtonData && alpineButtonData.scanningAll) {
+                            alpineButtonData.scanningAll = false;
+                            console.log("Scan All button reset due to error and empty queue.");
+                        }
+                    }
+                }
             });
         }
     </script>
