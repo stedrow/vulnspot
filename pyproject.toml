@@ -12,6 +12,6 @@ dependencies = [
     "python-dateutil==2.9.0.post0",
     "python-dotenv==1.1.0",
     "ruff>=0.11.8",
-    "sqlalchemy==2.0.40",
+    "sqlalchemy==2.0.41",
     "uvicorn[standard]==0.34.2",
 ]
