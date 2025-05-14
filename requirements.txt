@@ -1,5 +1,5 @@
 fastapi==0.115.12
-sqlalchemy==2.0.40
+sqlalchemy==2.0.41
 pydantic==2.11.4
 docker==7.1.0
 uvicorn[standard]==0.34.2
