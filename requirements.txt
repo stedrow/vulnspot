@@ -1,6 +1,6 @@
 fastapi==0.115.12
 sqlalchemy==2.0.41
-pydantic==2.11.4
+pydantic==2.11.5
 docker==7.1.0
 uvicorn[standard]==0.34.2
 python-dotenv==1.1.0
